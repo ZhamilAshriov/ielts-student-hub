@@ -1088,10 +1088,12 @@ document.addEventListener("keydown", (e) => {
   if (e.code === "Space") {
     e.preventDefault();
     flipFlashcard();
+  } else if (e.key.toLowerCase() === "r") {
+    e.preventDefault();
+    speakEnglishText(currentCard.word, true);
   } else if (isCardFlipped && ["1", "2", "3", "4"].includes(e.key)) {
     gradeCurrentCard(Number(e.key));
   }
-  
 });
 
 function calcSM2(prev, quality) {
