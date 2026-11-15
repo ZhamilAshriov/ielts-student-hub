@@ -772,6 +772,25 @@ window.startAssignment = function (assignmentId) {
   }
 };
 
+// 4. GRAMMAR BOOK WORKBOOK UPLOAD
+  else if (hw.skill === "grammar") {
+    leftPane.innerHTML = `<h3>Workbook Instructions</h3><div class="passage-box">${escapeHtml(hw.instructions)}</div>`;
+    rightPane.innerHTML = `
+      <h3>Upload Completed Pages</h3>
+      <div class="form-group">
+        <label for="gram-notes">Notes or Page Summary (Optional)</label>
+        <input type="text" id="gram-notes" placeholder="e.g., Completed all exercises in Sections 1-6 & 53-58" />
+      </div>
+      <div class="form-group">
+        <label for="gram-file">Upload Photo / Screenshot of Workbook</label>
+        <input type="file" id="gram-file" accept="image/*" required />
+      </div>
+      <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit Grammar Homework</button>
+    `;
+
+    document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
+  }
+
 // SUBMIT OBJECTIVE (READING / LISTENING) + PERMANENT MISTAKE TRACKER
 async function submitObjectiveHomework(hw) {
   const btn = document.getElementById("submit-lr-btn");
