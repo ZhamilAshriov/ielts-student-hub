@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IELTS Student Hub</title>
+  <title>IELTS 5.5–6.5 Student Hub</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- LOGIN SCREEN -->
   <div id="login-view" class="auth-container">
     <div class="auth-card">
-      <div class="brand-badge">IELTS HUB</div>
+      <div class="brand-badge">IELTS 5.5–6.5 HUB</div>
       <h1>Welcome Back</h1>
       <p class="subtitle">Enter your Student ID and password to access today's vocabulary, homework, and scores.</p>
       
@@ -46,19 +46,21 @@
     <nav id="student-nav" class="subnav hidden">
       <button class="nav-tab active" data-target="student-dashboard">Dashboard & Stats</button>
       <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
-      <button class="nav-tab" data-target="student-homework">Assignments</button>
+      <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
     </nav>
 
     <!-- TEACHER NAVIGATION -->
     <nav id="teacher-nav" class="subnav hidden">
       <button class="nav-tab active" data-target="teacher-roster">Students & Accounts</button>
-      <button class="nav-tab" data-target="teacher-grading">Grading Queue</button>
+      <button class="nav-tab" data-target="teacher-hw-tracker">Homework Matrix</button>
+      <button class="nav-tab" data-target="teacher-grading">Grading Queue <span id="nav-grade-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
     </nav>
 
     <!-- MAIN CONTENT AREA -->
     <main class="container">
-      <!-- TEACHER: ROSTER & CREATE STUDENT -->
+      <!-- ==================== TEACHER VIEWS ==================== -->
+      <!-- 1. ROSTER & CREATE STUDENT -->
       <section id="teacher-roster" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
@@ -107,20 +109,49 @@
         </div>
       </section>
 
-      <!-- PLACEHOLDER SECTIONS FOR PHASES 3–4 -->
-      <section id="teacher-grading" class="view-section hidden">
-        <div class="card"><h2>Grading Queue</h2><p class="muted">Coming in Phase 3: Review Writing essays and listen to Speaking audio recordings.</p></div>
+      <!-- 2. TEACHER HOMEWORK MATRIX -->
+      <section id="teacher-hw-tracker" class="view-section hidden">
+        <div class="card">
+          <div class="card-header-flex">
+            <div>
+              <h2>Homework Submission Matrix</h2>
+              <p class="muted" style="margin-bottom:0;">See who submitted on time, who is late, and who is missing assignments.</p>
+            </div>
+            <button id="refresh-matrix-btn" class="btn btn-outline btn-sm">Refresh</button>
+          </div>
+          <div class="table-wrapper" id="hw-matrix-container">
+            <p class="muted center">Loading matrix...</p>
+          </div>
+        </div>
       </section>
 
+      <!-- 3. TEACHER GRADING QUEUE -->
+      <section id="teacher-grading" class="view-section hidden">
+        <div class="card">
+          <div class="card-header-flex">
+            <div>
+              <h2>Writing & Speaking Grading Queue</h2>
+              <p class="muted" style="margin-bottom:0;">Review student essays and listen to Speaking audio recordings.</p>
+            </div>
+            <button id="refresh-grading-btn" class="btn btn-outline btn-sm">Refresh</button>
+          </div>
+          <div id="grading-list-container" class="grading-list">
+            <p class="muted center">Loading submissions...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. TEACHER MOCK SCORES PLACEHOLDER -->
       <section id="teacher-mocks" class="view-section hidden">
         <div class="card"><h2>Enter Mock Exam Scores</h2><p class="muted">Coming in Phase 4: Log L/R/W/S Mock Exam band scores into student analytics.</p></div>
       </section>
 
-      <!-- STUDENT: DASHBOARD -->
+      <!-- ==================== STUDENT VIEWS ==================== -->
+      <!-- 1. STUDENT DASHBOARD -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
           <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
-          <p class="muted" style="margin-bottom:0;">Keep your daily vocabulary streak alive and check your assignments below.</p>
+          <p class="muted" style="margin-bottom:0;">Keep your daily vocabulary streak alive and complete your IELTS homework before the due date.</p>
         </div>
 
         <div class="stats-grid">
@@ -135,6 +166,11 @@
             <span class="stat-sub" id="dash-today-done">0 reviewed today</span>
           </div>
           <div class="stat-box">
+            <span class="stat-label">Pending Homework</span>
+            <span class="stat-value" id="dash-hw-pending">0</span>
+            <button class="btn btn-outline btn-sm" id="dash-go-hw-btn" style="margin-top:10px;">View Assignments</button>
+          </div>
+          <div class="stat-box">
             <span class="stat-label">Mastered / Seen</span>
             <span class="stat-value" id="dash-mastered-count">0 / 0</span>
             <span class="stat-sub">Total vocabulary cards</span>
@@ -142,7 +178,7 @@
         </div>
       </section>
 
-      <!-- STUDENT: DAILY ANKI ENGINE -->
+      <!-- 2. DAILY ANKI ENGINE -->
       <section id="student-anki" class="view-section hidden">
         <div class="anki-header">
           <div>
@@ -155,7 +191,6 @@
           </div>
         </div>
 
-        <!-- FLASHCARD STAGE -->
         <div id="anki-stage" class="anki-stage">
           <div id="flashcard" class="flashcard">
             <div class="card-top-tag" id="card-lesson-tag">Lesson 1</div>
@@ -178,12 +213,10 @@
             </div>
           </div>
 
-          <!-- REVEAL BUTTON -->
           <div id="anki-reveal-bar" class="anki-controls">
             <button id="show-answer-btn" class="btn btn-primary btn-lg">Show Answer</button>
           </div>
 
-          <!-- SM-2 RATING BUTTONS -->
           <div id="anki-rate-bar" class="anki-controls hidden">
             <button class="rate-btn rate-again" data-quality="1">
               <span class="rate-title">Again</span>
@@ -204,7 +237,6 @@
           </div>
         </div>
 
-        <!-- DONE STATE -->
         <div id="anki-done-state" class="card center hidden" style="padding: 48px 24px;">
           <div style="font-size: 42px; margin-bottom: 12px;">🎉</div>
           <h2>All Caught Up for Today!</h2>
@@ -213,9 +245,80 @@
         </div>
       </section>
 
-      <!-- STUDENT: HOMEWORK PLACEHOLDER -->
+      <!-- 3. STUDENT ASSIGNMENTS LIST -->
       <section id="student-homework" class="view-section hidden">
-        <div class="card"><h2>Homework Assignments</h2><p class="muted">Coming in Phase 3: Listening, Reading, Writing & Speaking tasks.</p></div>
+        <div id="hw-list-view">
+          <div class="card">
+            <h2>Homework Assignments</h2>
+            <p class="muted">Complete Reading & Listening tests for instant analysis, or submit Writing essays and Speaking recordings.</p>
+            <div id="assignments-list-container" class="hw-grid"></div>
+          </div>
+        </div>
+
+        <!-- ACTIVE TEST RUNNER (Split Screen) -->
+        <div id="hw-runner-view" class="hidden">
+          <div class="runner-topbar">
+            <button id="back-to-hw-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
+            <h3 id="runner-title">Assignment Title</h3>
+            <span id="runner-due-badge" class="role-pill">Due</span>
+          </div>
+
+          <div class="split-runner">
+            <div class="runner-left card" id="runner-prompt-pane"></div>
+            <div class="runner-right card" id="runner-work-pane"></div>
+          </div>
+        </div>
+
+        <!-- POST-TEST ANALYSIS PAGE (Reading & Listening) -->
+        <div id="hw-analysis-view" class="hidden">
+          <div class="runner-topbar">
+            <button id="back-from-analysis-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
+            <h3 id="analysis-title">Test Analysis</h3>
+            <span id="analysis-status-pill" class="badge badge-green">Submitted</span>
+          </div>
+
+          <div class="stats-grid" style="margin-bottom: 20px;">
+            <div class="stat-box">
+              <span class="stat-label">Raw Score</span>
+              <span class="stat-value" id="ana-raw-score">0 / 0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Estimated IELTS Band</span>
+              <span class="stat-value" id="ana-band-score" style="color:var(--primary);">0.0</span>
+            </div>
+            <div class="stat-box">
+              <span class="stat-label">Accuracy</span>
+              <span class="stat-value" id="ana-accuracy">0%</span>
+            </div>
+          </div>
+
+          <div class="grid-2col">
+            <div class="card">
+              <h3>Question-Type Breakdown</h3>
+              <p class="muted">How you performed by IELTS question category on this test:</p>
+              <div id="ana-type-breakdown"></div>
+            </div>
+
+            <div class="card">
+              <h3>Answer Review</h3>
+              <p class="muted">Compare your answers against the official answer key:</p>
+              <div class="table-wrapper">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Q#</th>
+                      <th>Type</th>
+                      <th>Your Answer</th>
+                      <th>Correct Key</th>
+                      <th>Result</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ana-questions-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
   </div>
