@@ -345,7 +345,10 @@ function renderTeacherGradingQueue(students, submissions) {
         </div>
       `;
     } else if (sub.skill === "writing") {
-      contentHtml = `<div class="essay-preview">${escapeHtml(sub.essayText || "")}</div><div class="muted" style="font-size:12px;margin-bottom:8px;">Word count: ${sub.wordCount || 0} words</div>`;
+      const chartHtml = sub.chartImageUrl
+        ? `<div style="margin:10px 0;"><a href="${sub.chartImageUrl}" target="_blank" rel="noopener"><img src="${sub.chartImageUrl}" alt="Task 1 Graph" style="max-width:100%;max-height:260px;border:1px solid var(--border);border-radius:8px;" /></a><div class="muted" style="font-size:12px;margin-top:4px;">Uploaded Graph/Chart (click to enlarge)</div></div>`
+        : "";
+      contentHtml = `${chartHtml}<div class="essay-preview">${escapeHtml(sub.essayText || "")}</div><div class="muted" style="font-size:12px;margin-bottom:8px;">Word count: ${sub.wordCount || 0} words</div>`;
     } else if (sub.skill === "speaking") {
       contentHtml = `<div style="margin:12px 0;"><audio controls src="${sub.audioUrl}" style="width:100%;"></audio></div>`;
     } else if (sub.skill === "grammar") {
@@ -772,15 +775,19 @@ window.startAssignment = function (assignmentId) {
     `;
 
     document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
-  } else if (hw.skill === "writing") {
+ } else if (hw.skill === "writing") {
     leftPane.innerHTML = `<h3>Task Prompt</h3><div class="passage-box">${escapeHtml(hw.promptText)}</div>`;
     rightPane.innerHTML = `
       <div class="card-header-flex" style="margin-bottom:8px;">
         <h3>Your Response</h3>
         <span class="role-pill">Words: <strong id="writing-word-count">0</strong> / ${hw.minWords || 250}</span>
       </div>
-      <textarea id="writing-essay-input" rows="15" placeholder="Write your essay here..."></textarea>
-      <button class="btn btn-primary btn-full" style="margin-top:14px;" id="submit-writing-btn">Submit Essay</button>
+      <div class="form-group">
+        <label for="writing-chart-file">Upload Graph / Chart Image (Required for Task 1, Optional for Task 2)</label>
+        <input type="file" id="writing-chart-file" accept="image/*" />
+      </div>
+      <textarea id="writing-essay-input" rows="13" placeholder="Write your essay or report here..."></textarea>
+      <button class="btn btn-primary btn-full" style="margin-top:14px;" id="submit-writing-btn">Submit Writing</button>
     `;
 
     const textarea = document.getElementById("writing-essay-input");
@@ -944,31 +951,58 @@ window.openAnalysisPage = function (assignmentId) {
 
 async function submitWritingHomework(hw) {
   const text = document.getElementById("writing-essay-input").value.trim();
-  if (!text) return alert("Please write your essay before submitting.");
+  const chartFile = document.getElementById("writing-chart-file").files[0];
+
+  if (!text) return alert("Please write your essay or report before submitting.");
+  if (hw.id === "HW-05" && !chartFile) {
+    return alert("Please upload an image of the line graph you wrote about.");
+  }
 
   const btn = document.getElementById("submit-writing-btn");
   btn.disabled = true;
-  btn.textContent = "Submitting...";
+  btn.textContent = chartFile ? "Uploading graph & submitting..." : "Submitting...";
 
-  const wordCount = text.split(/\s+/).filter(Boolean).length;
-  const isLate = new Date() > new Date(hw.dueDate);
+  try {
+    let chartImageUrl = null;
+    if (chartFile) {
+      const formData = new FormData();
+      formData.append("file", chartFile);
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
-  const submissionData = {
-    assignmentId: hw.id,
-    studentId: currentStudentId,
-    skill: "writing",
-    status: "submitted",
-    isLate,
-    submittedAt: serverTimestamp(),
-    essayText: text,
-    wordCount
-  };
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+        method: "POST",
+        body: formData
+      });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || "Chart image upload failed");
+      chartImageUrl = data.secure_url;
+    }
 
-  await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
-  studentSubmissionsMap[hw.id] = submissionData;
-  updateDashboardUI();
-  alert("Essay submitted successfully! Your teacher will review and grade it soon.");
-  showHomeworkListView();
+    const wordCount = text.split(/\s+/).filter(Boolean).length;
+    const isLate = new Date() > new Date(hw.dueDate);
+
+    const submissionData = {
+      assignmentId: hw.id,
+      studentId: currentStudentId,
+      skill: "writing",
+      status: "submitted",
+      isLate,
+      submittedAt: serverTimestamp(),
+      essayText: text,
+      wordCount,
+      chartImageUrl
+    };
+
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Writing submitted successfully! Your teacher will review and grade it soon.");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Submit Writing";
+  }
 }
 
 async function startBrowserRecording() {
