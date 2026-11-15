@@ -3,14 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IELTS Student Hub</title>
+  <title>IELTS 5.5–6.5 Student Hub</title>
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- LOGIN SCREEN -->
   <div id="login-view" class="auth-container">
     <div class="auth-card">
-      <div class="brand-badge">IELTS  HUB</div>
+      <div class="brand-badge">IELTS 5.5–6.5 HUB</div>
       <h1>Welcome Back</h1>
       <p class="subtitle">Enter your Student ID and password to access today's vocabulary, homework, and scores.</p>
       
@@ -29,7 +29,7 @@
     </div>
   </div>
 
-  <!-- MAIN APP SHELL (Hidden until logged in) -->
+  <!-- MAIN APP SHELL -->
   <div id="app-shell" class="hidden">
     <header class="topbar">
       <div class="topbar-left">
@@ -45,7 +45,7 @@
     <!-- STUDENT NAVIGATION -->
     <nav id="student-nav" class="subnav hidden">
       <button class="nav-tab active" data-target="student-dashboard">Dashboard & Stats</button>
-      <button class="nav-tab" data-target="student-anki">Daily Anki</button>
+      <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-homework">Assignments</button>
     </nav>
 
@@ -95,10 +95,11 @@
                     <th>Full Name</th>
                     <th>Anki Streak</th>
                     <th>Today's Cards</th>
+                    <th>Total Cards</th>
                   </tr>
                 </thead>
                 <tbody id="roster-table-body">
-                  <tr><td colspan="4" class="muted center">Loading students...</td></tr>
+                  <tr><td colspan="5" class="muted center">Loading students...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -106,7 +107,7 @@
         </div>
       </section>
 
-      <!-- PLACEHOLDER SECTIONS FOR PHASES 2–4 -->
+      <!-- PLACEHOLDER SECTIONS FOR PHASES 3–4 -->
       <section id="teacher-grading" class="view-section hidden">
         <div class="card"><h2>Grading Queue</h2><p class="muted">Coming in Phase 3: Review Writing essays and listen to Speaking audio recordings.</p></div>
       </section>
@@ -115,17 +116,104 @@
         <div class="card"><h2>Enter Mock Exam Scores</h2><p class="muted">Coming in Phase 4: Log L/R/W/S Mock Exam band scores into student analytics.</p></div>
       </section>
 
+      <!-- STUDENT: DASHBOARD -->
       <section id="student-dashboard" class="view-section hidden">
-        <div class="card">
-          <h2>Welcome, <span id="welcome-student-name">Student</span>!</h2>
-          <p class="muted">Your account is active. In Phases 2–4, your score trajectory chart, permanent IELTS mistake breakdown, and daily Anki stats will appear right here.</p>
+        <div class="card" style="margin-bottom: 20px;">
+          <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
+          <p class="muted" style="margin-bottom:0;">Keep your daily vocabulary streak alive and check your assignments below.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-box">
+            <span class="stat-label">Cards Due Today</span>
+            <span class="stat-value" id="dash-due-count">0</span>
+            <button class="btn btn-primary btn-sm" id="dash-start-anki-btn" style="margin-top:10px;">Study Now</button>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Daily Streak</span>
+            <span class="stat-value" id="dash-streak-count">🔥 0 days</span>
+            <span class="stat-sub" id="dash-today-done">0 reviewed today</span>
+          </div>
+          <div class="stat-box">
+            <span class="stat-label">Mastered / Seen</span>
+            <span class="stat-value" id="dash-mastered-count">0 / 0</span>
+            <span class="stat-sub">Total vocabulary cards</span>
+          </div>
         </div>
       </section>
 
+      <!-- STUDENT: DAILY ANKI ENGINE -->
       <section id="student-anki" class="view-section hidden">
-        <div class="card"><h2>Daily Anki Vocabulary</h2><p class="muted">Coming in Phase 2: Flip cards & spaced repetition.</p></div>
+        <div class="anki-header">
+          <div>
+            <h2>Daily Vocabulary Review</h2>
+            <p class="muted" style="margin-bottom:0;" id="anki-deck-subtitle">Loading your spaced-repetition queue...</p>
+          </div>
+          <div class="anki-counters">
+            <span class="counter-pill new-pill">New: <strong id="anki-new-count">0</strong></span>
+            <span class="counter-pill due-pill">Review: <strong id="anki-review-count">0</strong></span>
+          </div>
+        </div>
+
+        <!-- FLASHCARD STAGE -->
+        <div id="anki-stage" class="anki-stage">
+          <div id="flashcard" class="flashcard">
+            <div class="card-top-tag" id="card-lesson-tag">Lesson 1</div>
+            
+            <div class="card-front">
+              <div class="word-display" id="card-word">Loading...</div>
+              <p class="flip-hint">Click card or press <kbd>Space</kbd> to show meaning</p>
+            </div>
+
+            <div id="card-back" class="card-back hidden">
+              <hr class="card-divider" />
+              <div class="def-block">
+                <span class="field-label">DEFINITION</span>
+                <p id="card-definition" class="def-text"></p>
+              </div>
+              <div class="ex-block">
+                <span class="field-label">EXAMPLE SENTENCE</span>
+                <p id="card-example" class="ex-text"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- REVEAL BUTTON -->
+          <div id="anki-reveal-bar" class="anki-controls">
+            <button id="show-answer-btn" class="btn btn-primary btn-lg">Show Answer</button>
+          </div>
+
+          <!-- SM-2 RATING BUTTONS -->
+          <div id="anki-rate-bar" class="anki-controls hidden">
+            <button class="rate-btn rate-again" data-quality="1">
+              <span class="rate-title">Again</span>
+              <span class="rate-time">This session</span>
+            </button>
+            <button class="rate-btn rate-hard" data-quality="2">
+              <span class="rate-title">Hard</span>
+              <span class="rate-time" id="lbl-hard">1 day</span>
+            </button>
+            <button class="rate-btn rate-good" data-quality="3">
+              <span class="rate-title">Good</span>
+              <span class="rate-time" id="lbl-good">1 day</span>
+            </button>
+            <button class="rate-btn rate-easy" data-quality="4">
+              <span class="rate-title">Easy</span>
+              <span class="rate-time" id="lbl-easy">4 days</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- DONE STATE -->
+        <div id="anki-done-state" class="card center hidden" style="padding: 48px 24px;">
+          <div style="font-size: 42px; margin-bottom: 12px;">🎉</div>
+          <h2>All Caught Up for Today!</h2>
+          <p class="muted">You have completed all your due vocabulary cards. Come back tomorrow to keep your streak alive.</p>
+          <button id="practice-all-btn" class="btn btn-outline">Practice All Cards Again (Bonus Mode)</button>
+        </div>
       </section>
 
+      <!-- STUDENT: HOMEWORK PLACEHOLDER -->
       <section id="student-homework" class="view-section hidden">
         <div class="card"><h2>Homework Assignments</h2><p class="muted">Coming in Phase 3: Listening, Reading, Writing & Speaking tasks.</p></div>
       </section>
