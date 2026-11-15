@@ -16,14 +16,13 @@ import {
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-// 1. REPLACE THIS WITH YOUR NEW FIREBASE PROJECT CONFIG
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDrGjx51H42h6Pkg44RIpZo0vyZApz8SGA",
+  authDomain: "zhamil-ielts-hub.firebaseapp.com",
+  projectId: "zhamil-ielts-hub",
+  storageBucket: "zhamil-ielts-hub.firebasestorage.app",
+  messagingSenderId: "101411624698",
+  appId: "1:101411624698:web:862eba707513e098c65b43"
 };
 
 // Primary app for main session
@@ -45,7 +44,6 @@ const loginForm = document.getElementById("login-form");
 const loginError = document.getElementById("login-error");
 const logoutBtn = document.getElementById("logout-btn");
 
-// Helper: Convert Student ID (e.g., "ST-101") or "teacher" to internal email
 function formatLoginEmail(rawId) {
   const clean = rawId.trim().toLowerCase();
   if (clean.includes("@")) return clean;
@@ -103,7 +101,6 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("teacher-nav").classList.add("hidden");
     switchView("student-dashboard");
 
-    // Fetch student profile name
     const snap = await getDoc(doc(db, "users", studentId));
     const fullName = snap.exists() ? snap.data().fullName : studentId;
     document.getElementById("user-display-name").textContent = fullName;
@@ -145,9 +142,8 @@ createStudentForm.addEventListener("submit", async (e) => {
   try {
     const email = studentId.toLowerCase() + DOMAIN;
     await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    await signOut(secondaryAuth); // Clean up secondary session
+    await signOut(secondaryAuth);
 
-    // Save student profile in Firestore
     await setDoc(doc(db, "users", studentId), {
       studentId,
       fullName,
