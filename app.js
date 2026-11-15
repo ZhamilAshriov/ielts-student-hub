@@ -733,22 +733,36 @@ window.startAssignment = function (assignmentId) {
   if (hw.skill === "reading" || hw.skill === "listening") {
     const totalQ = hw.totalQuestions || 40;
     const mistakeTypes = hw.skill === "reading"
-      ? ["TFNG", "YNNG", "MATCHING_HEADINGS", "MCQ", "GAP_FILL", "MATCHING_INFO"]
-      : ["GAP_FILL", "MCQ", "MAP_DIAGRAM", "MATCHING", "SENTENCE_COMPLETION"];
+      ? [
+          { key: "TFNG", label: "True / False / Not Given" },
+          { key: "YNNG", label: "Yes / No / Not Given" },
+          { key: "MATCHING_HEADINGS", label: "Matching Headings" },
+          { key: "MCQ", label: "Multiple Choice" },
+          { key: "GAP_FILL", label: "Summary / Note / Table Completion" },
+          { key: "MATCHING_INFO", label: "Matching Information / Features" }
+        ]
+      : [
+          { key: "MCQ", label: "Multiple Choice (Single & Multiple-Answer)" },
+          { key: "MATCHING", label: "Matching" },
+          { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
+          { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" },
+          { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+          { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+        ];
 
     leftPane.innerHTML = `
       <h3>Instructions</h3>
       <p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions || "Complete the assigned test, take a screenshot of your final score screen, and submit your score below.")}</p>
       <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;">
         <strong>How to log your mistakes:</strong><br/>
-        Look at the questions you got wrong and enter the count next to each question type (leave 0 if you made no mistakes in that type). This updates your personal weakness tracker!
+        Count how many questions you missed in each category and enter the number on the right (leave 0 if none). This builds your permanent IELTS weakness profile!
       </div>
     `;
 
-    const mistakeInputsHtml = mistakeTypes.map((type) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;font-weight:600;">${type.replace("_", " ")}</span>
-        <input type="number" class="mistake-type-input" data-type="${type}" min="0" max="${totalQ}" value="0" style="width:75px;padding:6px 8px;text-align:center;" />
+    const mistakeInputsHtml = mistakeTypes.map((item) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;line-height:1.35;">${item.label}</span>
+        <input type="number" class="mistake-type-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
       </div>
     `).join("");
 
@@ -765,8 +779,8 @@ window.startAssignment = function (assignmentId) {
       </div>
 
       <div class="form-group">
-        <label>Mistakes by Question Type (Optional)</label>
-        <div style="border:1px solid var(--border);border-radius:8px;padding:4px 12px;">
+        <label>Mistakes by Question Type</label>
+        <div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;">
           ${mistakeInputsHtml}
         </div>
       </div>
@@ -775,7 +789,7 @@ window.startAssignment = function (assignmentId) {
     `;
 
     document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
- } else if (hw.skill === "writing") {
+  } else if (hw.skill === "writing") {
     leftPane.innerHTML = `<h3>Task Prompt</h3><div class="passage-box">${escapeHtml(hw.promptText)}</div>`;
     rightPane.innerHTML = `
       <div class="card-header-flex" style="margin-bottom:8px;">
@@ -942,7 +956,7 @@ window.openAnalysisPage = function (assignmentId) {
   document.getElementById("ana-type-breakdown").innerHTML = logged.length > 0
     ? logged.map(([type, count]) => `
         <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
-          <strong>${type.replace("_", " ")}</strong>
+          <strong>${type.replace(/_/g, " ")}</strong>
           <span class="badge badge-red">${count} mistake${count > 1 ? "s" : ""}</span>
         </div>
       `).join("")
