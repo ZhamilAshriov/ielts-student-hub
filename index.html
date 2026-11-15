@@ -47,9 +47,10 @@
 
     <!-- STUDENT NAVIGATION -->
     <nav id="student-nav" class="subnav hidden">
-      <button class="nav-tab active" data-target="student-dashboard">Dashboard & Stats</button>
+      <button class="nav-tab active" data-target="student-dashboard">Home</button>
       <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
+      <button class="nav-tab" data-target="student-stats">Statistics & Progress</button>
       <button class="nav-tab" data-target="student-resources">Practice Resources</button>
     </nav>
 
@@ -237,14 +238,14 @@
       </section>
 
       <!-- ==================== STUDENT VIEWS ==================== -->
-      <!-- 1. STUDENT DASHBOARD & ANALYTICS -->
+      <!-- 1. STUDENT HOME (Action-Focused Daily Hub) -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
           <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
-          <p class="muted" style="margin-bottom:0;">Track your IELTS band progression, daily vocabulary streak, and weak question types below.</p>
+          <p class="muted" style="margin-bottom:0;">Complete today's vocabulary review and check your upcoming homework deadlines.</p>
         </div>
 
-        <div class="stats-grid" style="margin-bottom: 24px;">
+        <div class="stats-grid" style="margin-bottom: 20px;">
           <div class="stat-box">
             <span class="stat-label">Cards Due Today</span>
             <span class="stat-value" id="dash-due-count">0</span>
@@ -263,52 +264,7 @@
           <div class="stat-box">
             <span class="stat-label">Latest Overall Band</span>
             <span class="stat-value" id="dash-latest-band" style="color:var(--primary);">—</span>
-            <span class="stat-sub" id="dash-latest-mock-label">No mock logged yet</span>
-          </div>
-        </div>
-
-        <!-- SCORE TRAJECTORY CHART & PERMANENT WEAKNESSES -->
-        <div class="grid-2col" style="margin-bottom: 24px;">
-          <div class="card">
-            <div class="card-header-flex" style="margin-bottom:8px;">
-              <div>
-                <h3>IELTS Score Trajectory</h3>
-                <p class="muted" style="margin-bottom:0;">Tracks rises and drops across Homework & Mock Exams</p>
-              </div>
-            </div>
-            <div style="position:relative;height:280px;width:100%;margin-top:12px;">
-              <canvas id="student-score-chart"></canvas>
-            </div>
-          </div>
-
-          <div class="card">
-            <h3>Permanent Mistake Breakdown</h3>
-            <p class="muted">Cumulative errors logged across all Reading & Listening tests:</p>
-            <div id="dash-permanent-mistakes"></div>
-          </div>
-        </div>
-
-        <!-- MOCK EXAM HISTORY TABLE -->
-        <div class="card">
-          <h3>Mock Exam History</h3>
-          <p class="muted">Official Mock Exam scores entered by your teacher:</p>
-          <div class="table-wrapper">
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Mock Exam</th>
-                  <th>Listening</th>
-                  <th>Reading</th>
-                  <th>Writing</th>
-                  <th>Speaking</th>
-                  <th>Overall</th>
-                </tr>
-              </thead>
-              <tbody id="student-mocks-tbody">
-                <tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>
-              </tbody>
-            </table>
+            <button class="btn btn-outline btn-sm" id="dash-go-stats-btn" style="margin-top:10px;">Open Statistics</button>
           </div>
         </div>
       </section>
@@ -441,7 +397,97 @@
         </div>
       </section>
 
-      <!-- 4. STUDENT PRACTICE RESOURCES -->
+      <!-- 4. DEDICATED STATISTICS, GROUP BENCHMARKS & FEEDBACK PAGE -->
+      <section id="student-stats" class="view-section hidden">
+        <!-- ROW 1: PERSONAL TRAJECTORY + ANONYMOUS GROUP BENCHMARK -->
+        <div class="grid-2col" style="margin-bottom: 24px;">
+          <div class="card">
+            <h3>Your IELTS Score Trajectory</h3>
+            <p class="muted">Tracks every rise and drop across Homework & Mock Exams:</p>
+            <div style="position:relative;height:280px;width:100%;">
+              <canvas id="student-score-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>You vs. Group Benchmark (Anonymous)</h3>
+            <p class="muted">Compare your latest Mock Exam bands against the class average and highest score:</p>
+            <div style="position:relative;height:280px;width:100%;">
+              <canvas id="group-compare-chart"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <!-- ROW 2: YOUR WEAKNESSES vs GROUP COMMON MISTAKES -->
+        <div class="grid-2col" style="margin-bottom: 24px;">
+          <div class="card">
+            <h3>Your Weakest Question Types</h3>
+            <p class="muted">Your personal cumulative mistakes across Reading & Listening:</p>
+            <div id="dash-permanent-mistakes"></div>
+          </div>
+
+          <div class="card">
+            <h3>Group Common Mistakes</h3>
+            <p class="muted">Most missed IELTS question types across the entire class:</p>
+            <div id="group-common-mistakes"></div>
+          </div>
+        </div>
+
+        <!-- ROW 3: EFFORT LEADERBOARD + CENTRALIZED TEACHER FEEDBACK -->
+        <div class="grid-2col" style="margin-bottom: 24px;">
+          <div class="card">
+            <h3>Daily Consistency Leaderboard</h3>
+            <p class="muted">Ranked by daily Anki vocabulary streaks and total cards studied:</p>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Rank</th>
+                    <th>Student</th>
+                    <th>Streak</th>
+                    <th>Cards Studied</th>
+                  </tr>
+                </thead>
+                <tbody id="effort-leaderboard-tbody">
+                  <tr><td colspan="4" class="muted center">Loading leaderboard...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Teacher Feedback Log</h3>
+            <p class="muted">All comments and band reviews left by your teacher:</p>
+            <div id="teacher-feedback-feed" class="hw-grid"></div>
+          </div>
+        </div>
+
+        <!-- ROW 4: MOCK EXAM HISTORY TABLE -->
+        <div class="card">
+          <h3>Your Mock Exam History</h3>
+          <p class="muted">Official Mock Exam scores entered by your teacher:</p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Mock Exam</th>
+                  <th>Listening</th>
+                  <th>Reading</th>
+                  <th>Writing</th>
+                  <th>Speaking</th>
+                  <th>Overall</th>
+                </tr>
+              </thead>
+              <tbody id="student-mocks-tbody">
+                <tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. STUDENT PRACTICE RESOURCES -->
       <section id="student-resources" class="view-section hidden">
         <div class="card">
           <div class="card-header-flex" style="flex-wrap:wrap;">
