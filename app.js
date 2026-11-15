@@ -1508,139 +1508,184 @@ window.startAssignment = function (assignmentId) {
   const rightPane = document.getElementById("runner-work-pane");
 
   if (hw.skill === "reading" || hw.skill === "listening") {
-    const totalQ = hw.totalQuestions || 40;
-    const mistakeTypes = hw.skill === "reading"
-      ? [
-          { key: "TFNG", label: "True / False / Not Given" },
-          { key: "YNNG", label: "Yes / No / Not Given" },
-          { key: "MATCHING_HEADINGS", label: "Matching Headings" },
-          { key: "MCQ", label: "Multiple Choice" },
-          { key: "GAP_FILL", label: "Summary / Note / Table Completion" },
-          { key: "MATCHING_INFO", label: "Matching Information / Features" }
-        ]
-      : [
-          { key: "MCQ", label: "Multiple Choice (Single & Multiple-Answer)" },
-          { key: "MATCHING", label: "Matching" },
-          { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
-          { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" },
-          { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
-          { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
-        ];
+    const isDrill = Boolean(hw.isDrill);
 
-    leftPane.innerHTML = `
-      <h3>Instructions</h3>
-      <p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions || "Complete the assigned test, take a screenshot of your final score screen, and submit your score below.")}</p>
-      <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;">
-        <strong>How to log your mistakes:</strong><br/>
-        Count how many questions you missed in each category and enter the number on the right (leave 0 if none). This builds your permanent IELTS weakness profile!
-      </div>
-    `;
+    if (isDrill) {
+      const drillTypes = hw.drillTypes || [
+        { key: "TFNG", label: "True / False / Not Given" },
+        { key: "YNNG", label: "Yes / No / Not Given" }
+      ];
 
-    const mistakeInputsHtml = mistakeTypes.map((item) => `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <span style="font-size:13px;font-weight:600;line-height:1.35;">${item.label}</span>
-        <input type="number" class="mistake-type-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
-      </div>
-    `).join("");
-
-    rightPane.innerHTML = `
-      <h3>Submit Score & Screenshot</h3>
-      <div class="form-group">
-        <label for="lr-raw-score">Your Correct Answers (out of ${totalQ})</label>
-        <input type="number" id="lr-raw-score" min="0" max="${totalQ}" placeholder="e.g., 27" required />
-      </div>
-
-      <div class="form-group">
-        <label for="lr-screenshot-file">Upload Result Screenshot (PNG / JPG)</label>
-        <input type="file" id="lr-screenshot-file" accept="image/*" required />
-      </div>
-
-      <div class="form-group">
-        <label>Mistakes by Question Type</label>
-        <div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;">
-          ${mistakeInputsHtml}
+      leftPane.innerHTML = `
+        <h3>Drill Instructions</h3>
+        <p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions || "Complete the assigned drill, take a screenshot of your result, and enter your correct answers out of total questions for each section below.")}</p>
+        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;">
+          <strong>How this works:</strong><br/>
+          Enter how many questions you got right and how many total questions you completed for each question type. Mistakes are automatically calculated and added to your weakness profile.
         </div>
-      </div>
+      `;
 
-      <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Score</button>
-    `;
-
-    document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
-  } else if (hw.skill === "writing") {
-    leftPane.innerHTML = `<h3>Task Prompt</h3><div class="passage-box">${escapeHtml(hw.promptText)}</div>`;
-    rightPane.innerHTML = `
-      <div class="card-header-flex" style="margin-bottom:8px;">
-        <h3>Your Response</h3>
-        <span class="role-pill">Words: <strong id="writing-word-count">0</strong> / ${hw.minWords || 250}</span>
-      </div>
-      <div class="form-group">
-        <label for="writing-chart-file">Upload Graph / Chart Image (Required for Task 1, Optional for Task 2)</label>
-        <input type="file" id="writing-chart-file" accept="image/*" />
-      </div>
-      <textarea id="writing-essay-input" rows="13" placeholder="Write your essay or report here..."></textarea>
-      <button class="btn btn-primary btn-full" style="margin-top:14px;" id="submit-writing-btn">Submit Writing</button>
-    `;
-
-    const textarea = document.getElementById("writing-essay-input");
-    textarea.addEventListener("input", () => {
-      const words = textarea.value.trim().split(/\s+/).filter(Boolean).length;
-      document.getElementById("writing-word-count").textContent = words;
-    });
-
-    document.getElementById("submit-writing-btn").addEventListener("click", () => submitWritingHomework(hw));
-  } else if (hw.skill === "speaking") {
-    recordedAudioBlob = null;
-    leftPane.innerHTML = `<h3>Speaking Cue Card</h3><div class="passage-box">${escapeHtml(hw.promptText)}</div>`;
-    rightPane.innerHTML = `
-      <h3>Record Your Response</h3>
-      <p class="muted">Click Record, speak clearly into your microphone, preview your audio, and submit.</p>
-      <div class="recorder-box">
-        <div id="rec-status-label" class="muted" style="margin-bottom:4px;">Ready to record</div>
-        <div class="rec-timer" id="rec-timer-display">00:00</div>
-        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
-          <button class="btn btn-danger" id="btn-start-rec">● Start Recording</button>
-          <button class="btn btn-outline hidden" id="btn-stop-rec">■ Stop</button>
+      const drillRowsHtml = drillTypes.map((item) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
+          <span style="font-size:14px;font-weight:600;">${item.label}</span>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <input type="number" class="drill-correct-input" data-type="${item.key}" min="0" placeholder="Correct" style="width:84px;padding:6px 8px;text-align:center;" required />
+            <span style="font-weight:700;color:var(--muted);">/</span>
+            <input type="number" class="drill-total-input" data-type="${item.key}" min="0" placeholder="Total" style="width:84px;padding:6px 8px;text-align:center;" required />
+          </div>
         </div>
-        <div id="rec-preview-area" class="hidden" style="margin-top:18px;">
-          <audio id="rec-audio-preview" controls style="width:100%;margin-bottom:12px;"></audio>
-          <button class="btn btn-success btn-full" id="submit-speaking-btn">Upload & Submit Recording</button>
+      `).join("");
+
+      rightPane.innerHTML = `
+        <h3>Submit Drill Score & Screenshot</h3>
+        <div class="form-group">
+          <label for="lr-screenshot-file">Upload Result Screenshot (PNG / JPG)</label>
+          <input type="file" id="lr-screenshot-file" accept="image/*" required />
         </div>
-      </div>
-    `;
 
-    document.getElementById("btn-start-rec").addEventListener("click", startBrowserRecording);
-    document.getElementById("btn-stop-rec").addEventListener("click", stopBrowserRecording);
-    document.getElementById("submit-speaking-btn").addEventListener("click", () => submitSpeakingHomework(hw));
-  } else if (hw.skill === "grammar") {
-    leftPane.innerHTML = `<h3>Workbook Instructions</h3><div class="passage-box">${escapeHtml(hw.instructions)}</div>`;
-    rightPane.innerHTML = `
-      <h3>Upload Completed Pages</h3>
-      <div class="form-group">
-        <label for="gram-notes">Notes or Page Summary (Optional)</label>
-        <input type="text" id="gram-notes" placeholder="e.g., Completed all exercises in Sections 1-6 & 53-58" />
-      </div>
-      <div class="form-group">
-        <label for="gram-file">Upload Photo / Screenshot of Workbook</label>
-        <input type="file" id="gram-file" accept="image/*" required />
-      </div>
-      <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit Grammar Homework</button>
-    `;
+        <div class="form-group">
+          <label>Score Breakdown (Correct / Total Questions)</label>
+          <div style="border:1px solid var(--border);border-radius:8px;padding:2px 14px;">
+            ${drillRowsHtml}
+          </div>
+        </div>
 
-    document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
+        <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Drill</button>
+      `;
+
+      document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
+    } else {
+      const totalQ = hw.totalQuestions || 40;
+      const mistakeTypes = hw.skill === "reading"
+        ? [
+            { key: "TFNG", label: "True / False / Not Given" },
+            { key: "YNNG", label: "Yes / No / Not Given" },
+            { key: "MATCHING_HEADINGS", label: "Matching Headings" },
+            { key: "MCQ", label: "Multiple Choice" },
+            { key: "GAP_FILL", label: "Summary / Note / Table Completion" },
+            { key: "MATCHING_INFO", label: "Matching Information / Features" }
+          ]
+        : [
+            { key: "MCQ", label: "Multiple Choice (Single & Multiple-Answer)" },
+            { key: "MATCHING", label: "Matching" },
+            { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
+            { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" },
+            { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+            { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+          ];
+
+      leftPane.innerHTML = `
+        <h3>Instructions</h3>
+        <p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions || "Complete the assigned test, take a screenshot of your final score screen, and submit your score below.")}</p>
+        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;">
+          <strong>How to log your mistakes:</strong><br/>
+          Count how many questions you missed in each category and enter the number on the right (leave 0 if none). This builds your permanent IELTS weakness profile!
+        </div>
+      `;
+
+      const mistakeInputsHtml = mistakeTypes.map((item) => `
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+          <span style="font-size:13px;font-weight:600;line-height:1.35;">${item.label}</span>
+          <input type="number" class="mistake-type-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
+        </div>
+      `).join("");
+
+      rightPane.innerHTML = `
+        <h3>Submit Score & Screenshot</h3>
+        <div class="form-group">
+          <label for="lr-raw-score">Your Correct Answers (out of ${totalQ})</label>
+          <input type="number" id="lr-raw-score" min="0" max="${totalQ}" placeholder="e.g., 27" required />
+        </div>
+
+        <div class="form-group">
+          <label for="lr-screenshot-file">Upload Result Screenshot (PNG / JPG)</label>
+          <input type="file" id="lr-screenshot-file" accept="image/*" required />
+        </div>
+
+        <div class="form-group">
+          <label>Mistakes by Question Type</label>
+          <div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;">
+            ${mistakeInputsHtml}
+          </div>
+        </div>
+
+        <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Score</button>
+      `;
+
+      document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
+    }
   }
-};
 
 async function submitScreenshotHomework(hw) {
-  const totalQ = hw.totalQuestions || 40;
-  const rawVal = Number(document.getElementById("lr-raw-score").value);
+  const isDrill = Boolean(hw.isDrill);
   const fileInput = document.getElementById("lr-screenshot-file");
   const file = fileInput.files[0];
 
-  if (isNaN(rawVal) || document.getElementById("lr-raw-score").value === "" || rawVal < 0 || rawVal > totalQ) {
-    return alert(`Please enter a valid score between 0 and ${totalQ}.`);
-  }
   if (!file) {
     return alert("Please attach a screenshot of your test result.");
+  }
+
+  let rawVal = 0;
+  let totalQ = hw.totalQuestions || 40;
+  const mistakeCounts = {};
+  const drillBreakdown = {};
+  const updatedMistakes = { ...(currentStudentProfile.permanentMistakes || {}) };
+
+  if (isDrill) {
+    let sumCorrect = 0;
+    let sumTotal = 0;
+    const correctInputs = document.querySelectorAll(".drill-correct-input");
+
+    for (const cInp of correctInputs) {
+      const type = cInp.dataset.type;
+      const tInp = document.querySelector(`.drill-total-input[data-type="${type}"]`);
+      const label = MISTAKE_LABELS[type] || type;
+
+      if (cInp.value === "" || tInp.value === "") {
+        return alert(`Please enter both Correct and Total questions for ${label}.`);
+      }
+
+      const correctNum = Number(cInp.value);
+      const totalNum = Number(tInp.value);
+
+      if (isNaN(correctNum) || isNaN(totalNum) || correctNum < 0 || totalNum < 0 || correctNum > totalNum) {
+        return alert(`Invalid numbers for ${label}: Correct (${correctNum}) cannot exceed Total (${totalNum}).`);
+      }
+
+      const wrongNum = totalNum - correctNum;
+      sumCorrect += correctNum;
+      sumTotal += totalNum;
+      drillBreakdown[type] = { correct: correctNum, total: totalNum };
+      mistakeCounts[type] = wrongNum;
+
+      if (wrongNum > 0) {
+        if (!updatedMistakes[type]) updatedMistakes[type] = { wrong: 0 };
+        updatedMistakes[type].wrong = (updatedMistakes[type].wrong || 0) + wrongNum;
+      }
+    }
+
+    if (sumTotal === 0) {
+      return alert("Total questions across sections must be greater than 0.");
+    }
+
+    rawVal = sumCorrect;
+    totalQ = sumTotal;
+  } else {
+    rawVal = Number(document.getElementById("lr-raw-score").value);
+    if (isNaN(rawVal) || document.getElementById("lr-raw-score").value === "" || rawVal < 0 || rawVal > totalQ) {
+      return alert(`Please enter a valid score between 0 and ${totalQ}.`);
+    }
+
+    document.querySelectorAll(".mistake-type-input").forEach((inp) => {
+      const type = inp.dataset.type;
+      const wrongNum = Math.max(0, Number(inp.value) || 0);
+      mistakeCounts[type] = wrongNum;
+
+      if (wrongNum > 0) {
+        if (!updatedMistakes[type]) updatedMistakes[type] = { wrong: 0 };
+        updatedMistakes[type].wrong = (updatedMistakes[type].wrong || 0) + wrongNum;
+      }
+    });
   }
 
   const btn = document.getElementById("submit-lr-btn");
@@ -1659,21 +1704,7 @@ async function submitScreenshotHomework(hw) {
     const data = await res.json();
     if (!data.secure_url) throw new Error(data.error?.message || "Screenshot upload failed");
 
-    const mistakeCounts = {};
-    const updatedMistakes = { ...(currentStudentProfile.permanentMistakes || {}) };
-
-    document.querySelectorAll(".mistake-type-input").forEach((inp) => {
-      const type = inp.dataset.type;
-      const wrongNum = Math.max(0, Number(inp.value) || 0);
-      mistakeCounts[type] = wrongNum;
-
-      if (wrongNum > 0) {
-        if (!updatedMistakes[type]) updatedMistakes[type] = { wrong: 0 };
-        updatedMistakes[type].wrong = (updatedMistakes[type].wrong || 0) + wrongNum;
-      }
-    });
-
-    const isRealPracticeTest = !hw.isDrill && totalQ === 40;
+    const isRealPracticeTest = !isDrill && totalQ === 40;
     const bandScore = isRealPracticeTest ? rawToIeltsBand(rawVal, 40) : null;
     const isLate = new Date() > new Date(hw.dueDate);
 
@@ -1689,7 +1720,8 @@ async function submitScreenshotHomework(hw) {
       totalQuestions: totalQ,
       bandScore,
       screenshotUrl: data.secure_url,
-      mistakeCounts
+      mistakeCounts,
+      drillBreakdown
     };
 
     await Promise.all([
@@ -1704,7 +1736,7 @@ async function submitScreenshotHomework(hw) {
   } catch (err) {
     alert("Upload error: " + err.message);
     btn.disabled = false;
-    btn.textContent = "Upload Screenshot & Submit Score";
+    btn.textContent = isDrill ? "Upload Screenshot & Submit Drill" : "Upload Screenshot & Submit Score";
   }
 }
 
