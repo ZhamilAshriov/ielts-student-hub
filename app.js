@@ -800,6 +800,45 @@ function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(
 // ==========================================
 // STUDENT: INITIALIZATION & ANKI ENGINE
 // ==========================================
+async function initStudentData() {
+  const [usersSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
+    getDocs(collection(db, "users")),
+    getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
+    getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
+    getDocs(collection(db, "mockScores"))
+  ]);
+
+  allGroupUsers = [];
+  usersSnap.forEach((d) => {
+    if (d.data().role === "student") allGroupUsers.push(d.data());
+  });
+
+  const me = allGroupUsers.find((u) => u.studentId === currentStudentId);
+  currentStudentProfile = me || { studentId: currentStudentId, fullName: currentStudentId, ankiStats: {}, permanentMistakes: {} };
+
+  document.getElementById("user-display-name").textContent = currentStudentProfile.fullName;
+  document.getElementById("welcome-student-name").textContent = currentStudentProfile.fullName;
+
+  ankiProgressMap = {};
+  progSnap.forEach((d) => { ankiProgressMap[d.data().cardId] = d.data(); });
+
+  studentSubmissionsMap = {};
+  subsSnap.forEach((d) => { studentSubmissionsMap[d.data().assignmentId] = d.data(); });
+
+  allGroupMocks = [];
+  mocksSnap.forEach((d) => allGroupMocks.push(d.data()));
+  allGroupMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  studentMocksList = allGroupMocks.filter((m) => m.studentId === currentStudentId);
+
+  bonusMode = false;
+  selectedDeckId = "all";
+  buildAnkiQueue();
+  updateDashboardUI();
+  renderAssignmentsList();
+  renderResourcesList("all");
+}
+
 function getFilteredVocabCards() {
   const all = [];
   VOCAB_DECKS.forEach((deck) => {
@@ -849,7 +888,6 @@ function speakEnglishText(rawText, isWord = true) {
   if (!("speechSynthesis" in window) || !rawText) return;
   window.speechSynthesis.cancel();
 
-  // Strip "(adj.)", "(adv.)", "(n.)" and expand "/" alternatives cleanly for natural speech
   let clean = rawText;
   if (isWord) {
     clean = clean
@@ -872,21 +910,30 @@ function speakEnglishText(rawText, isWord = true) {
   window.speechSynthesis.speak(utterance);
 }
 
-document.getElementById("anki-deck-select").addEventListener("change", (e) => {
-  selectedDeckId = e.target.value;
-  bonusMode = false;
-  buildAnkiQueue();
-});
+const deckSelectEl = document.getElementById("anki-deck-select");
+if (deckSelectEl) {
+  deckSelectEl.addEventListener("change", (e) => {
+    selectedDeckId = e.target.value;
+    bonusMode = false;
+    buildAnkiQueue();
+  });
+}
 
-document.getElementById("speak-word-btn").addEventListener("click", (e) => {
-  e.stopPropagation(); // Prevent flipping card when clicking Listen
-  if (currentCard) speakEnglishText(currentCard.word, true);
-});
+const speakWordBtn = document.getElementById("speak-word-btn");
+if (speakWordBtn) {
+  speakWordBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (currentCard) speakEnglishText(currentCard.word, true);
+  });
+}
 
-document.getElementById("speak-example-btn").addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (currentCard) speakEnglishText(currentCard.example, false);
-});
+const speakExampleBtn = document.getElementById("speak-example-btn");
+if (speakExampleBtn) {
+  speakExampleBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (currentCard) speakEnglishText(currentCard.example, false);
+  });
+}
 
 function buildAnkiQueue() {
   populateAnkiDeckDropdown();
@@ -1048,7 +1095,7 @@ function renderNextAnkiCard() {
 
   stage.classList.remove("hidden");
   doneState.classList.add("hidden");
-  subtitle.textContent = bonusMode ? "Bonus Practice Mode" : `${ankiQueue.length} card(s) remaining in today's session`;
+  subtitle.textContent = bonusMode ? "Bonus Practice Mode" : `${ankiQueue.length} card(s) remaining in this session`;
 
   currentCard = ankiQueue[0];
   isCardFlipped = false;
@@ -1172,6 +1219,7 @@ async function gradeCurrentCard(quality) {
     await updateDoc(doc(db, "users", currentStudentId), { ankiStats: updatedStats });
   }
 
+  populateAnkiDeckDropdown();
   updateDashboardUI();
   renderNextAnkiCard();
 }
@@ -1198,7 +1246,7 @@ function showHomeworkListView() {
 document.getElementById("back-to-hw-btn").addEventListener("click", showHomeworkListView);
 document.getElementById("back-from-analysis-btn").addEventListener("click", showHomeworkListView);
 
-let hwViewFilter = "todo"; // "todo" | "completed"
+let hwViewFilter = "todo";
 
 function renderAssignmentsList() {
   const container = document.getElementById("assignments-list-container");
