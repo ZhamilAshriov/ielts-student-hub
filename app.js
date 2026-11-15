@@ -20,6 +20,7 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
+import { RESOURCES } from "./resources-data.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDrGjx51H42h6Pkg44RIpZo0vyZApz8SGA",
@@ -449,6 +450,7 @@ async function initStudentData() {
   buildAnkiQueue();
   updateDashboardUI();
   renderAssignmentsList();
+  renderResourcesList("all");
 }
 
 function buildAnkiQueue() {
@@ -1107,6 +1109,64 @@ async function submitGrammarHomework(hw) {
     btn.textContent = "Upload & Submit Grammar Homework";
   }
 }
+
+// ==========================================
+// STUDENT: CURATED PRACTICE RESOURCES
+// ==========================================
+function renderResourcesList(categoryFilter = "all") {
+  const container = document.getElementById("resources-grid-container");
+  if (!container) return;
+
+  const filtered = categoryFilter === "all"
+    ? RESOURCES
+    : RESOURCES.filter((r) => r.category === categoryFilter);
+
+  if (filtered.length === 0) {
+    container.innerHTML = `<p class="muted center">No resources added in this category yet.</p>`;
+    return;
+  }
+
+  const catLabels = {
+    shadowing: "SHADOWING",
+    listening: "ACTIVE LISTENING",
+    reading: "ACTIVE READING"
+  };
+
+  container.innerHTML = filtered.map((res) => {
+    const embedHtml = res.youtubeId
+      ? `<div style="margin-top:12px;border-radius:8px;overflow:hidden;max-width:560px;">
+           <iframe width="100%" height="260" src="https://www.youtube.com/embed/${res.youtubeId}" title="${escapeHtml(res.title)}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+         </div>`
+      : "";
+
+    return `
+      <div class="hw-item" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div>
+            <span class="badge badge-blue" style="margin-bottom:6px;">${catLabels[res.category] || res.category.toUpperCase()}</span>
+            ${res.duration ? `<span class="role-pill" style="margin-left:6px;">⏱ ${escapeHtml(res.duration)}</span>` : ""}
+            <h3 style="margin-top:6px;">${escapeHtml(res.title)}</h3>
+          </div>
+          ${res.url ? `<a href="${res.url}" target="_blank" rel="noopener" class="btn btn-outline btn-sm">Open Link ↗</a>` : ""}
+        </div>
+        ${embedHtml}
+        ${res.instructions ? `<div class="feedback-callout" style="white-space:pre-line;margin-top:12px;"><strong>How to Practice:</strong>\n${escapeHtml(res.instructions)}</div>` : ""}
+      </div>
+    `;
+  }).join("");
+}
+
+document.querySelectorAll(".res-filter-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".res-filter-btn").forEach((b) => {
+      b.classList.remove("btn-primary");
+      b.classList.add("btn-outline");
+    });
+    btn.classList.remove("btn-outline");
+    btn.classList.add("btn-primary");
+    renderResourcesList(btn.dataset.cat);
+  });
+});
 
 function escapeHtml(str) {
   return String(str)
