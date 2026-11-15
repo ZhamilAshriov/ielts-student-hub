@@ -418,6 +418,8 @@ document.getElementById("mock-score-form").addEventListener("submit", async (e) 
   }
 });
 
+let selectedMatrixWeek = "ALL";
+
 function renderTeacherHwMatrix(students, submissions) {
   const container = document.getElementById("hw-matrix-container");
   if (students.length === 0) {
@@ -425,11 +427,30 @@ function renderTeacherHwMatrix(students, submissions) {
     return;
   }
 
+  const weeks = [...new Set(ASSIGNMENTS.map((a) => a.week || "General"))];
+  if (selectedMatrixWeek === "ALL" && weeks.length > 0) {
+    selectedMatrixWeek = weeks[weeks.length - 1]; // Default to latest week
+  }
+
+  const filteredAssignments = selectedMatrixWeek === "ALL_SHOW"
+    ? ASSIGNMENTS
+    : ASSIGNMENTS.filter((a) => (a.week || "General") === selectedMatrixWeek);
+
+  const filterBar = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+      <label style="margin:0;white-space:nowrap;">Filter by Week:</label>
+      <select id="matrix-week-select" style="max-width:260px;padding:6px 10px;">
+        ${weeks.map((w) => `<option value="${escapeHtml(w)}" ${selectedMatrixWeek === w ? "selected" : ""}>${escapeHtml(w)}</option>`).join("")}
+        <option value="ALL_SHOW" ${selectedMatrixWeek === "ALL_SHOW" ? "selected" : ""}>Show All Weeks (${ASSIGNMENTS.length})</option>
+      </select>
+    </div>
+  `;
+
   const now = new Date();
-  const headers = ASSIGNMENTS.map((a) => `<th>${a.id}<br><span style="font-weight:400;font-size:11px;">${a.skill.toUpperCase()}</span></th>`).join("");
+  const headers = filteredAssignments.map((a) => `<th>${a.id}<br><span style="font-weight:400;font-size:11px;">${a.skill.toUpperCase()}</span></th>`).join("");
 
   const rows = students.map((s) => {
-    const cells = ASSIGNMENTS.map((a) => {
+    const cells = filteredAssignments.map((a) => {
       const sub = submissions.find((item) => item.studentId === s.studentId && item.assignmentId === a.id);
       if (sub) {
         const scoreTxt = sub.bandScore ? ` (${sub.bandScore})` : "";
@@ -447,7 +468,12 @@ function renderTeacherHwMatrix(students, submissions) {
     return `<tr><td><strong>${s.studentId}</strong><br><span class="muted" style="font-size:12px;">${s.fullName}</span></td>${cells}</tr>`;
   }).join("");
 
-  container.innerHTML = `<table><thead><tr><th>Student</th>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+  container.innerHTML = `${filterBar}<table><thead><tr><th>Student</th>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
+
+  document.getElementById("matrix-week-select").addEventListener("change", (e) => {
+    selectedMatrixWeek = e.target.value;
+    renderTeacherHwMatrix(students, submissions);
+  });
 }
 
 function renderTeacherGradingQueue(students, submissions) {
@@ -1128,63 +1154,116 @@ function showHomeworkListView() {
 document.getElementById("back-to-hw-btn").addEventListener("click", showHomeworkListView);
 document.getElementById("back-from-analysis-btn").addEventListener("click", showHomeworkListView);
 
+let hwViewFilter = "todo"; // "todo" | "completed"
+
 function renderAssignmentsList() {
   const container = document.getElementById("assignments-list-container");
   const now = new Date();
 
-  container.innerHTML = ASSIGNMENTS.map((hw) => {
-    const sub = studentSubmissionsMap[hw.id];
-    const isPastDue = now > new Date(hw.dueDate);
+  const todoList = ASSIGNMENTS.filter((hw) => !studentSubmissionsMap[hw.id]);
+  const doneList = ASSIGNMENTS.filter((hw) => !!studentSubmissionsMap[hw.id]);
 
-    let statusBadge = "";
-    let actionBtn = "";
-    let feedbackHtml = "";
+  const filterControls = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px;">
+      <button class="btn ${hwViewFilter === "todo" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-todo">
+        To Do (${todoList.length})
+      </button>
+      <button class="btn ${hwViewFilter === "completed" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-done">
+        Completed & Graded (${doneList.length})
+      </button>
+    </div>
+  `;
 
-    if (sub) {
-      if (sub.status === "graded") {
-        statusBadge = sub.bandScore
-          ? `<span class="badge badge-green">Verified: Band ${sub.bandScore}</span>`
-          : `<span class="badge badge-green">Checked by Teacher</span>`;
-      } else if (sub.isLate) {
-        statusBadge = `<span class="badge badge-red">Submitted Late${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+  const activeList = hwViewFilter === "todo" ? todoList : doneList;
+
+  if (activeList.length === 0) {
+    container.innerHTML = filterControls + (hwViewFilter === "todo"
+      ? `<p class="muted center" style="padding:24px 0;">🎉 All assignments completed! Switch to "Completed & Graded" to view your past work.</p>`
+      : `<p class="muted center" style="padding:24px 0;">No completed assignments yet.</p>`);
+    attachHwFilterListeners();
+    return;
+  }
+
+  // Group items by week
+  const grouped = {};
+  activeList.forEach((hw) => {
+    const wk = hw.week || "Current Assignments";
+    if (!grouped[wk]) grouped[wk] = [];
+    grouped[wk].push(hw);
+  });
+
+  const groupsHtml = Object.entries(grouped).map(([weekTitle, items]) => {
+    const cardsHtml = items.map((hw) => {
+      const sub = studentSubmissionsMap[hw.id];
+      const isPastDue = now > new Date(hw.dueDate);
+
+      let statusBadge = "";
+      let actionBtn = "";
+      let feedbackHtml = "";
+
+      if (sub) {
+        if (sub.status === "graded") {
+          statusBadge = sub.bandScore
+            ? `<span class="badge badge-green">Verified: Band ${sub.bandScore}</span>`
+            : `<span class="badge badge-green">Checked by Teacher</span>`;
+        } else if (sub.isLate) {
+          statusBadge = `<span class="badge badge-red">Submitted Late${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+        } else {
+          statusBadge = `<span class="badge badge-blue">Submitted${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+        }
+
+        if (sub.teacherFeedback) {
+          feedbackHtml = `<div class="feedback-callout"><strong>Teacher Feedback:</strong> ${escapeHtml(sub.teacherFeedback)}</div>`;
+        }
+
+        if (hw.skill === "reading" || hw.skill === "listening") {
+          actionBtn = `<button class="btn btn-outline btn-sm" onclick="window.openAnalysisPage('${hw.id}')">View Receipt</button>`;
+        } else {
+          actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
+        }
       } else {
-        statusBadge = `<span class="badge badge-blue">Submitted${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+        statusBadge = isPastDue
+          ? `<span class="badge badge-gray">Missing (Past Due)</span>`
+          : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
+
+        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Homework</button>`;
       }
 
-      if (sub.teacherFeedback) {
-        feedbackHtml = `<div class="feedback-callout"><strong>Teacher Feedback:</strong> ${escapeHtml(sub.teacherFeedback)}</div>`;
-      }
-
-      if (hw.skill === "reading" || hw.skill === "listening") {
-        actionBtn = `<button class="btn btn-outline btn-sm" onclick="window.openAnalysisPage('${hw.id}')">View Receipt</button>`;
-      } else {
-        actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Completed</span>`;
-      }
-    } else {
-      statusBadge = isPastDue
-        ? `<span class="badge badge-gray">Missing (Past Due)</span>`
-        : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
-
-      actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Homework</button>`;
-    }
+      return `
+        <div class="hw-item">
+          <div style="flex:1;min-width:240px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+              <span class="role-pill">${hw.skill.toUpperCase()}</span>
+              <strong>${hw.title}</strong>
+            </div>
+            <div class="hw-meta">
+              <span>Deadline: ${formatDueDate(hw.dueDate)}</span>
+              ${statusBadge}
+            </div>
+            ${feedbackHtml}
+          </div>
+          <div>${actionBtn}</div>
+        </div>
+      `;
+    }).join("");
 
     return `
-      <div class="hw-item">
-        <div style="flex:1;min-width:240px;">
-          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-            <span class="role-pill">${hw.skill.toUpperCase()}</span>
-            <strong>${hw.title}</strong>
-          </div>
-          <div class="hw-meta">
-            <span>Deadline: ${formatDueDate(hw.dueDate)}</span>
-            ${statusBadge}
-          </div>
-          ${feedbackHtml}
-        </div>
-        <div>${actionBtn}</div>
+      <div style="margin-bottom:18px;">
+        <h3 style="font-size:14px;color:var(--primary);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">${escapeHtml(weekTitle)}</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;">${cardsHtml}</div>
       </div>
     `;
   }).join("");
+
+  container.innerHTML = filterControls + groupsHtml;
+  attachHwFilterListeners();
+}
+
+function attachHwFilterListeners() {
+  const todoBtn = document.getElementById("btn-hw-todo");
+  const doneBtn = document.getElementById("btn-hw-done");
+  if (todoBtn) todoBtn.addEventListener("click", () => { hwViewFilter = "todo"; renderAssignmentsList(); });
+  if (doneBtn) doneBtn.addEventListener("click", () => { hwViewFilter = "completed"; renderAssignmentsList(); });
 }
 
 window.startAssignment = function (assignmentId) {
