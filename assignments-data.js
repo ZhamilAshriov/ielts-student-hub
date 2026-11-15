@@ -33,9 +33,10 @@ export const ASSIGNMENTS = [
     week: "Week 1 (Nov 15–21)",
     title: "Reading Drill: 30 TFNG + 30 YNNG Passages",
     skill: "reading",
+    isDrill: true,
     dueDate: "2026-11-17T12:00",
     totalQuestions: 360,
-    instructions: "Complete 30 True/False/Not Given passages and 30 Yes/No/Not Given passages (approx. 4–8 questions each). Upload a screenshot of your final score summary, enter your total correct answers, and log your TFNG / YNNG mistakes."
+    instructions: "Complete 30 True/False/Not Given passages and 30 Yes/No/Not Given passages. Upload a screenshot of your final score summary, enter your total correct answers, and log your TFNG / YNNG mistakes (recorded for weakness analysis only—not plotted as a 40-question Band score)."
   },
   {
     id: "HW-04",
