@@ -22,7 +22,6 @@ import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
 import { RESOURCES } from "./resources-data.js";
 
-// Register Service Worker for PWA Desktop/Mobile Install
 if ("serviceWorker" in navigator) {
   navigator.serviceWorker.register("./sw.js").catch(() => {});
 }
@@ -59,9 +58,12 @@ let isCardFlipped = false;
 let bonusMode = false;
 let studentSubmissionsMap = {};
 let studentMocksList = [];
+let allGroupUsers = [];
+let allGroupMocks = [];
 
 // Chart Instances
 let studentChartInstance = null;
+let groupCompareChartInstance = null;
 let inspectorChartInstance = null;
 
 // Cached Teacher Data
@@ -199,6 +201,8 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
 
     if (tab.dataset.target === "student-homework") {
       showHomeworkListView();
+    } else if (tab.dataset.target === "student-stats") {
+      renderStatisticsPage();
     }
   });
 });
@@ -214,6 +218,9 @@ document.getElementById("dash-start-anki-btn").addEventListener("click", () => {
 });
 document.getElementById("dash-go-hw-btn").addEventListener("click", () => {
   document.querySelector('[data-target="student-homework"]').click();
+});
+document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
+  document.querySelector('[data-target="student-stats"]').click();
 });
 
 // ==========================================
@@ -328,7 +335,7 @@ window.inspectStudent = function (studentId) {
   const sMocks = cachedMocks.filter((m) => m.studentId === studentId);
 
   inspectorChartInstance = buildScoreChart("inspector-score-chart", sSubs, sMocks, inspectorChartInstance);
-  renderPermanentMistakes("inspector-mistakes-box", student.permanentMistakes || {});
+  renderMistakeBars("inspector-mistakes-box", student.permanentMistakes || {}, "No mistakes logged yet.");
   card.scrollIntoView({ behavior: "smooth" });
 };
 
@@ -565,7 +572,6 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   if (!canvas || typeof Chart === "undefined") return existingChart;
   if (existingChart) existingChart.destroy();
 
-  // Combine chronologically: Mock Exams + Graded/Submitted Homework with Band Scores
   const events = [];
 
   mocks.forEach((m) => {
@@ -599,7 +605,6 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   });
 
   events.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-
   const labels = events.length > 0 ? events.map((e) => e.label) : ["No Scores Yet"];
 
   return new Chart(canvas, {
@@ -663,17 +668,85 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   });
 }
 
-function renderPermanentMistakes(containerId, mistakesObj) {
+function buildGroupCompareChart(canvasId, myMocks, groupMocks, existingChart) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === "undefined") return existingChart;
+  if (existingChart) existingChart.destroy();
+
+  // Get latest mock per student in group
+  const latestByStudent = {};
+  groupMocks.forEach((m) => {
+    const prev = latestByStudent[m.studentId];
+    if (!prev || (m.date || "") >= (prev.date || "")) {
+      latestByStudent[m.studentId] = m;
+    }
+  });
+
+  const latestList = Object.values(latestByStudent);
+  const myLatest = myMocks.length > 0 ? myMocks[myMocks.length - 1] : null;
+
+  const avgSkill = (key) => {
+    if (latestList.length === 0) return 0;
+    const sum = latestList.reduce((acc, m) => acc + (Number(m[key]) || 0), 0);
+    return Number((sum / latestList.length).toFixed(1));
+  };
+
+  const maxSkill = (key) => {
+    if (latestList.length === 0) return 0;
+    return Math.max(...latestList.map((m) => Number(m[key]) || 0));
+  };
+
+  const skills = ["listening", "reading", "writing", "speaking", "overall"];
+
+  return new Chart(canvas, {
+    type: "bar",
+    data: {
+      labels: ["Listening", "Reading", "Writing", "Speaking", "Overall"],
+      datasets: [
+        {
+          label: "You (Latest Mock)",
+          data: skills.map((k) => (myLatest ? Number(myLatest[k]) : 0)),
+          backgroundColor: "#1d4ed8",
+          borderRadius: 6
+        },
+        {
+          label: "Group Average",
+          data: skills.map((k) => avgSkill(k)),
+          backgroundColor: "#94a3b8",
+          borderRadius: 6
+        },
+        {
+          label: "Group Highest",
+          data: skills.map((k) => maxSkill(k)),
+          backgroundColor: "#16a34a",
+          borderRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(--danger)") {
   const container = document.getElementById(containerId);
   if (!container) return;
 
   const entries = Object.entries(mistakesObj || {})
-    .map(([type, val]) => ({ type, wrong: val.wrong || 0 }))
+    .map(([type, val]) => ({ type, wrong: typeof val === "number" ? val : (val.wrong || 0) }))
     .filter((item) => item.wrong > 0)
     .sort((a, b) => b.wrong - a.wrong);
 
   if (entries.length === 0) {
-    container.innerHTML = `<p class="muted">No question-type mistakes logged yet. They will appear automatically when you submit Reading or Listening homework.</p>`;
+    container.innerHTML = `<p class="muted">${emptyText}</p>`;
     return;
   }
 
@@ -685,10 +758,10 @@ function renderPermanentMistakes(containerId, mistakesObj) {
       <div class="type-bar-row">
         <div class="type-bar-head">
           <span>${MISTAKE_LABELS[item.type] || item.type}</span>
-          <span style="color:var(--danger);">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
+          <span style="color:${barColor};">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
         </div>
         <div class="progress-track">
-          <div class="progress-fill" style="width:${pct}%;background:var(--danger);"></div>
+          <div class="progress-fill" style="width:${pct}%;background:${barColor};"></div>
         </div>
       </div>
     `;
@@ -707,16 +780,20 @@ function getAllVocabCards() {
 }
 
 async function initStudentData() {
-  const [userSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
-    getDoc(doc(db, "users", currentStudentId)),
+  const [usersSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
+    getDocs(collection(db, "users")),
     getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
     getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
-    getDocs(query(collection(db, "mockScores"), where("studentId", "==", currentStudentId)))
+    getDocs(collection(db, "mockScores"))
   ]);
 
-  currentStudentProfile = userSnap.exists()
-    ? userSnap.data()
-    : { fullName: currentStudentId, ankiStats: {}, permanentMistakes: {} };
+  allGroupUsers = [];
+  usersSnap.forEach((d) => {
+    if (d.data().role === "student") allGroupUsers.push(d.data());
+  });
+
+  const me = allGroupUsers.find((u) => u.studentId === currentStudentId);
+  currentStudentProfile = me || { studentId: currentStudentId, fullName: currentStudentId, ankiStats: {}, permanentMistakes: {} };
 
   document.getElementById("user-display-name").textContent = currentStudentProfile.fullName;
   document.getElementById("welcome-student-name").textContent = currentStudentProfile.fullName;
@@ -727,9 +804,11 @@ async function initStudentData() {
   studentSubmissionsMap = {};
   subsSnap.forEach((d) => { studentSubmissionsMap[d.data().assignmentId] = d.data(); });
 
-  studentMocksList = [];
-  mocksSnap.forEach((d) => studentMocksList.push(d.data()));
-  studentMocksList.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  allGroupMocks = [];
+  mocksSnap.forEach((d) => allGroupMocks.push(d.data()));
+  allGroupMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+
+  studentMocksList = allGroupMocks.filter((m) => m.studentId === currentStudentId);
 
   bonusMode = false;
   buildAnkiQueue();
@@ -766,21 +845,102 @@ function updateDashboardUI() {
   document.getElementById("dash-today-done").textContent = `${todayCount} reviewed today`;
   document.getElementById("dash-hw-pending").textContent = pendingHw;
 
-  // Latest Mock Score Box
   if (studentMocksList.length > 0) {
     const latest = studentMocksList[studentMocksList.length - 1];
     document.getElementById("dash-latest-band").textContent = `Band ${latest.overall}`;
-    document.getElementById("dash-latest-mock-label").textContent = latest.mockTitle;
   } else {
     document.getElementById("dash-latest-band").textContent = "—";
-    document.getElementById("dash-latest-mock-label").textContent = "No mock logged yet";
+  }
+}
+
+// ==========================================
+// DEDICATED STATISTICS & GROUP COMPARISON PAGE
+// ==========================================
+function renderStatisticsPage() {
+  const subsArr = Object.values(studentSubmissionsMap);
+
+  // 1. Charts
+  studentChartInstance = buildScoreChart("student-score-chart", subsArr, studentMocksList, studentChartInstance);
+  groupCompareChartInstance = buildGroupCompareChart("group-compare-chart", studentMocksList, allGroupMocks, groupCompareChartInstance);
+
+  // 2. Personal Weaknesses vs Group Common Mistakes
+  renderMistakeBars(
+    "dash-permanent-mistakes",
+    currentStudentProfile.permanentMistakes || {},
+    "No question-type mistakes logged yet.",
+    "var(--danger)"
+  );
+
+  const groupMistakeTotals = {};
+  allGroupUsers.forEach((u) => {
+    Object.entries(u.permanentMistakes || {}).forEach(([type, val]) => {
+      const count = val.wrong || 0;
+      if (count > 0) {
+        groupMistakeTotals[type] = (groupMistakeTotals[type] || 0) + count;
+      }
+    });
+  });
+
+  renderMistakeBars(
+    "group-common-mistakes",
+    groupMistakeTotals,
+    "No group mistake data logged yet.",
+    "var(--warning)"
+  );
+
+  // 3. Effort Leaderboard (Ranked by Streak, then Total Cards Reviewed)
+  const yesterday = getTodayStr(-1);
+  const rankedStudents = allGroupUsers.map((u) => {
+    const st = u.ankiStats || {};
+    const liveStreak = (st.lastReviewedDate && st.lastReviewedDate >= yesterday) ? (st.streak || 0) : 0;
+    return {
+      studentId: u.studentId,
+      fullName: u.fullName,
+      streak: liveStreak,
+      totalReviewed: st.totalReviewed || 0
+    };
+  }).sort((a, b) => (b.streak - a.streak) || (b.totalReviewed - a.totalReviewed));
+
+  const lbBody = document.getElementById("effort-leaderboard-tbody");
+  lbBody.innerHTML = rankedStudents.map((s, idx) => {
+    const isMe = s.studentId === currentStudentId;
+    const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+    return `
+      <tr style="${isMe ? "background:#eff6ff;" : ""}">
+        <td><strong>${medal}</strong></td>
+        <td>${escapeHtml(s.fullName)} ${isMe ? `<span class="badge badge-blue" style="margin-left:4px;">You</span>` : ""}</td>
+        <td>🔥 ${s.streak} days</td>
+        <td>${s.totalReviewed} cards</td>
+      </tr>
+    `;
+  }).join("");
+
+  // 4. Centralized Teacher Feedback Log
+  const feedbackItems = subsArr.filter((sub) => sub.teacherFeedback || sub.status === "graded");
+  const fbContainer = document.getElementById("teacher-feedback-feed");
+
+  if (feedbackItems.length === 0) {
+    fbContainer.innerHTML = `<p class="muted">No teacher feedback yet. Once your teacher reviews your submissions, comments will appear here.</p>`;
+  } else {
+    fbContainer.innerHTML = feedbackItems.map((sub) => {
+      const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+      const title = hw ? hw.title : sub.assignmentId;
+      const bandPill = sub.bandScore ? `<span class="badge badge-green">Band ${sub.bandScore}</span>` : `<span class="badge badge-green">Checked</span>`;
+      return `
+        <div class="hw-item" style="flex-direction:column;align-items:stretch;padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(title)}</strong>
+            ${bandPill}
+          </div>
+          ${sub.teacherFeedback
+            ? `<div class="feedback-callout" style="margin-top:8px;">${escapeHtml(sub.teacherFeedback)}</div>`
+            : `<span class="muted" style="font-size:13px;margin-top:4px;margin-bottom:0;">Verified by teacher (no written note).</span>`}
+        </div>
+      `;
+    }).join("");
   }
 
-  // Render Score Trajectory Chart, Permanent Mistake Profile & Mock History Table
-  const subsArr = Object.values(studentSubmissionsMap);
-  studentChartInstance = buildScoreChart("student-score-chart", subsArr, studentMocksList, studentChartInstance);
-  renderPermanentMistakes("dash-permanent-mistakes", currentStudentProfile.permanentMistakes || {});
-
+  // 5. Mock Exam History Table
   const mocksTbody = document.getElementById("student-mocks-tbody");
   if (studentMocksList.length === 0) {
     mocksTbody.innerHTML = `<tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>`;
