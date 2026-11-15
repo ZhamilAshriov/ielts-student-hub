@@ -47,6 +47,7 @@
       <button class="nav-tab active" data-target="student-dashboard">Dashboard & Stats</button>
       <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
+      <button class="nav-tab" data-target="student-resources">Practice Resources</button>
     </nav>
 
     <!-- TEACHER NAVIGATION -->
@@ -303,6 +304,26 @@
               <div id="ana-type-breakdown"></div>
             </div>
           </div>
+        </div>
+      </section>
+
+      <!-- 4. STUDENT PRACTICE RESOURCES -->
+      <section id="student-resources" class="view-section hidden">
+        <div class="card">
+          <div class="card-header-flex" style="flex-wrap:wrap;">
+            <div>
+              <h2>Practice & Video Library</h2>
+              <p class="muted" style="margin-bottom:0;">Curated materials for daily Shadowing, Active Listening, and Active Reading.</p>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;" id="resource-filter-bar">
+              <button class="btn btn-primary btn-sm res-filter-btn" data-cat="all">All</button>
+              <button class="btn btn-outline btn-sm res-filter-btn" data-cat="shadowing">Shadowing</button>
+              <button class="btn btn-outline btn-sm res-filter-btn" data-cat="listening">Active Listening</button>
+              <button class="btn btn-outline btn-sm res-filter-btn" data-cat="reading">Active Reading</button>
+            </div>
+          </div>
+
+          <div id="resources-grid-container" class="hw-grid" style="margin-top:16px;"></div>
         </div>
       </section>
     </main>
