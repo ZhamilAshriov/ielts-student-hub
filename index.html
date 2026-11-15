@@ -130,8 +130,8 @@
         <div class="card">
           <div class="card-header-flex">
             <div>
-              <h2>Writing & Speaking Grading Queue</h2>
-              <p class="muted" style="margin-bottom:0;">Review student essays and listen to Speaking audio recordings.</p>
+              <h2>Student Submissions & Grading</h2>
+              <p class="muted" style="margin-bottom:0;">Verify L/R score screenshots, check grammar pages, grade Writing essays, and listen to Speaking audio.</p>
             </div>
             <button id="refresh-grading-btn" class="btn btn-outline btn-sm">Refresh</button>
           </div>
@@ -250,7 +250,7 @@
         <div id="hw-list-view">
           <div class="card">
             <h2>Homework Assignments</h2>
-            <p class="muted">Complete Reading & Listening tests for instant analysis, or submit Writing essays and Speaking recordings.</p>
+            <p class="muted">Upload your Listening & Reading result screenshots, grammar workbook photos, essays, or Speaking recordings.</p>
             <div id="assignments-list-container" class="hw-grid"></div>
           </div>
         </div>
@@ -269,21 +269,21 @@
           </div>
         </div>
 
-        <!-- POST-TEST ANALYSIS PAGE (Reading & Listening) -->
+        <!-- SUMMARY / RECEIPT VIEW FOR COMPLETED L/R -->
         <div id="hw-analysis-view" class="hidden">
           <div class="runner-topbar">
             <button id="back-from-analysis-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
-            <h3 id="analysis-title">Test Analysis</h3>
+            <h3 id="analysis-title">Submitted Result</h3>
             <span id="analysis-status-pill" class="badge badge-green">Submitted</span>
           </div>
 
           <div class="stats-grid" style="margin-bottom: 20px;">
             <div class="stat-box">
-              <span class="stat-label">Raw Score</span>
-              <span class="stat-value" id="ana-raw-score">0 / 0</span>
+              <span class="stat-label">Submitted Score</span>
+              <span class="stat-value" id="ana-raw-score">0 / 40</span>
             </div>
             <div class="stat-box">
-              <span class="stat-label">Estimated IELTS Band</span>
+              <span class="stat-label">IELTS Band</span>
               <span class="stat-value" id="ana-band-score" style="color:var(--primary);">0.0</span>
             </div>
             <div class="stat-box">
@@ -294,28 +294,13 @@
 
           <div class="grid-2col">
             <div class="card">
-              <h3>Question-Type Breakdown</h3>
-              <p class="muted">How you performed by IELTS question category on this test:</p>
-              <div id="ana-type-breakdown"></div>
+              <h3>Uploaded Result Screenshot</h3>
+              <div id="ana-screenshot-box" style="margin-top:12px;"></div>
             </div>
-
             <div class="card">
-              <h3>Answer Review</h3>
-              <p class="muted">Compare your answers against the official answer key:</p>
-              <div class="table-wrapper">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Q#</th>
-                      <th>Type</th>
-                      <th>Your Answer</th>
-                      <th>Correct Key</th>
-                      <th>Result</th>
-                    </tr>
-                  </thead>
-                  <tbody id="ana-questions-tbody"></tbody>
-                </table>
-              </div>
+              <h3>Logged Mistake Breakdown</h3>
+              <p class="muted">Mistakes recorded into your permanent profile:</p>
+              <div id="ana-type-breakdown"></div>
             </div>
           </div>
         </div>
