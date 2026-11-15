@@ -429,7 +429,7 @@ function renderTeacherHwMatrix(students, submissions) {
 
   const weeks = [...new Set(ASSIGNMENTS.map((a) => a.week || "General"))];
   if (selectedMatrixWeek === "ALL" && weeks.length > 0) {
-    selectedMatrixWeek = weeks[weeks.length - 1]; // Default to latest week
+    selectedMatrixWeek = weeks[weeks.length - 1];
   }
 
   const filteredAssignments = selectedMatrixWeek === "ALL_SHOW"
@@ -495,8 +495,10 @@ function renderTeacherGradingQueue(students, submissions) {
     const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
     const title = hw ? hw.title : sub.assignmentId;
     const sName = studentNameMap[sub.studentId] || sub.studentId;
+    const noBandRequired = sub.skill === "grammar" || sub.isDrill || (hw && hw.isDrill);
+
     const statusBadge = sub.status === "graded"
-      ? `<span class="badge badge-green">${sub.skill === "grammar" ? "Checked" : `Verified: Band ${sub.bandScore}`}</span>`
+      ? `<span class="badge badge-green">${noBandRequired ? "Checked" : `Verified: Band ${sub.bandScore}`}</span>`
       : `<span class="badge badge-yellow">Needs Review</span>`;
     const lateBadge = sub.isLate ? `<span class="badge badge-red">Late</span>` : "";
 
@@ -510,7 +512,7 @@ function renderTeacherGradingQueue(students, submissions) {
       contentHtml = `
         <div style="margin:10px 0;">
           <p style="font-size:14px;margin-bottom:8px;">
-            <strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} (Auto Band ${sub.bandScore})
+            <strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} ${sub.bandScore ? `(Auto Band ${sub.bandScore})` : `(Drill — Weakest Areas Only)`}
           </p>
           ${mistakesSummary ? `<div style="margin-bottom:10px;">${mistakesSummary}</div>` : ""}
           ${sub.screenshotUrl ? `<a href="${sub.screenshotUrl}" target="_blank" rel="noopener"><img src="${sub.screenshotUrl}" alt="Score Screenshot" style="max-width:100%;max-height:280px;border:1px solid var(--border);border-radius:8px;" /></a><div class="muted" style="font-size:12px;margin-top:4px;">Click image to open full size</div>` : ""}
@@ -532,9 +534,8 @@ function renderTeacherGradingQueue(students, submissions) {
       `;
     }
 
-    const isGrammar = sub.skill === "grammar";
-    const bandSelectorHtml = isGrammar
-      ? `<div><label>Status</label><input type="text" value="Workbook Check" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${sub.docId}" value="" /></div>`
+    const bandSelectorHtml = noBandRequired
+      ? `<div><label>Status</label><input type="text" value="${sub.skill === "grammar" ? "Workbook Check" : "Drill Check"}" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${sub.docId}" value="" /></div>`
       : `<div>
           <label>Confirm / Set Band</label>
           <select id="band-${sub.docId}">
@@ -560,14 +561,14 @@ function renderTeacherGradingQueue(students, submissions) {
             <label>Teacher Feedback</label>
             <input type="text" id="fb-${sub.docId}" placeholder="Leave a comment or feedback..." value="${escapeHtml(sub.teacherFeedback || "")}" />
           </div>
-          <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', ${isGrammar})">Save & Verify</button>
+          <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', ${noBandRequired})">Save & Verify</button>
         </div>
       </div>
     `;
   }).join("");
 }
 
-window.saveTeacherGrade = async function (docId, isGrammar = false) {
+window.saveTeacherGrade = async function (docId, noBandRequired = false) {
   const rawBand = document.getElementById(`band-${docId}`).value;
   const fbVal = document.getElementById(`fb-${docId}`).value.trim();
 
@@ -576,7 +577,7 @@ window.saveTeacherGrade = async function (docId, isGrammar = false) {
     status: "graded",
     gradedAt: serverTimestamp()
   };
-  if (!isGrammar && rawBand) {
+  if (!noBandRequired && rawBand) {
     updatePayload.bandScore = Number(rawBand);
   }
 
@@ -613,8 +614,10 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   });
 
   submissions.forEach((sub) => {
-    if (!sub.bandScore) return;
     const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+    if (!sub.bandScore || sub.isDrill || (hw && hw.isDrill)) return;
+    if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) !== 40) return;
+
     const dateStr = sub.submittedAt?.toDate
       ? sub.submittedAt.toDate().toISOString().split("T")[0]
       : (hw ? hw.dueDate.split("T")[0] : "2026-11-15");
@@ -699,7 +702,6 @@ function buildGroupCompareChart(canvasId, myMocks, groupMocks, existingChart) {
   if (!canvas || typeof Chart === "undefined") return existingChart;
   if (existingChart) existingChart.destroy();
 
-  // Get latest mock per student in group
   const latestByStudent = {};
   groupMocks.forEach((m) => {
     const prev = latestByStudent[m.studentId];
@@ -885,11 +887,9 @@ function updateDashboardUI() {
 function renderStatisticsPage() {
   const subsArr = Object.values(studentSubmissionsMap);
 
-  // 1. Charts
   studentChartInstance = buildScoreChart("student-score-chart", subsArr, studentMocksList, studentChartInstance);
   groupCompareChartInstance = buildGroupCompareChart("group-compare-chart", studentMocksList, allGroupMocks, groupCompareChartInstance);
 
-  // 2. Personal Weaknesses vs Group Common Mistakes
   renderMistakeBars(
     "dash-permanent-mistakes",
     currentStudentProfile.permanentMistakes || {},
@@ -914,7 +914,6 @@ function renderStatisticsPage() {
     "var(--warning)"
   );
 
-  // 3. Effort Leaderboard (Ranked by Streak, then Total Cards Reviewed)
   const yesterday = getTodayStr(-1);
   const rankedStudents = allGroupUsers.map((u) => {
     const st = u.ankiStats || {};
@@ -941,7 +940,6 @@ function renderStatisticsPage() {
     `;
   }).join("");
 
-  // 4. Centralized Teacher Feedback Log
   const feedbackItems = subsArr.filter((sub) => sub.teacherFeedback || sub.status === "graded");
   const fbContainer = document.getElementById("teacher-feedback-feed");
 
@@ -966,7 +964,6 @@ function renderStatisticsPage() {
     }).join("");
   }
 
-  // 5. Mock Exam History Table
   const mocksTbody = document.getElementById("student-mocks-tbody");
   if (studentMocksList.length === 0) {
     mocksTbody.innerHTML = `<tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>`;
@@ -1184,7 +1181,6 @@ function renderAssignmentsList() {
     return;
   }
 
-  // Group items by week
   const grouped = {};
   activeList.forEach((hw) => {
     const wk = hw.week || "Current Assignments";
@@ -1446,13 +1442,15 @@ async function submitScreenshotHomework(hw) {
       }
     });
 
-    const bandScore = rawToIeltsBand(rawVal, totalQ);
+    const isRealPracticeTest = !hw.isDrill && totalQ === 40;
+    const bandScore = isRealPracticeTest ? rawToIeltsBand(rawVal, 40) : null;
     const isLate = new Date() > new Date(hw.dueDate);
 
     const submissionData = {
       assignmentId: hw.id,
       studentId: currentStudentId,
       skill: hw.skill,
+      isDrill: !isRealPracticeTest,
       status: "submitted",
       isLate,
       submittedAt: serverTimestamp(),
@@ -1495,7 +1493,9 @@ window.openAnalysisPage = function (assignmentId) {
 
   const pct = Math.round((sub.rawScore / sub.totalQuestions) * 100);
   document.getElementById("ana-raw-score").textContent = `${sub.rawScore} / ${sub.totalQuestions}`;
-  document.getElementById("ana-band-score").textContent = `Band ${sub.bandScore}`;
+  document.getElementById("ana-band-score").textContent = sub.bandScore
+    ? `Band ${sub.bandScore}`
+    : "Practice Drill";
   document.getElementById("ana-accuracy").textContent = `${pct}%`;
 
   document.getElementById("ana-screenshot-box").innerHTML = sub.screenshotUrl
