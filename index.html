@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IELTS Student Hub</title>
+  <title>Ambition Group — IELTS Student Hub</title>
   <link rel="manifest" href="manifest.json" />
   <meta name="theme-color" content="#1d4ed8" />
   <link rel="stylesheet" href="style.css" />
@@ -13,9 +13,9 @@
   <!-- LOGIN SCREEN -->
   <div id="login-view" class="auth-container">
     <div class="auth-card">
-      <div class="brand-badge">IELTS HUB</div>
+      <div class="brand-badge">AMBITION GROUP • IELTS HUB</div>
       <h1>Welcome Back</h1>
-      <p class="subtitle">Enter your Student ID and password to access today's vocabulary, homework, and scores.</p>
+      <p class="subtitle">Sign in to your <strong>Ambition Group</strong> portal to access today's vocabulary, homework, and scores.</p>
       
       <form id="login-form">
         <div class="form-group">
@@ -36,7 +36,7 @@
   <div id="app-shell" class="hidden">
     <header class="topbar">
       <div class="topbar-left">
-        <span class="logo-text">IELTS Hub</span>
+        <span class="logo-text">Ambition Group <span style="font-weight:400;opacity:0.85;font-size:15px;">| IELTS Hub</span></span>
         <span id="role-badge" class="role-pill">Student</span>
       </div>
       <div class="topbar-right">
@@ -70,7 +70,7 @@
         <div class="grid-2col">
           <div class="card">
             <h2>Create Student Account</h2>
-            <p class="muted">Generate a login ID and password for a new student in your 5.5–6.5 group.</p>
+            <p class="muted">Generate a login ID and password for a new student in Ambition Group.</p>
             <form id="create-student-form">
               <div class="form-group">
                 <label for="new-student-name">Full Name</label>
@@ -91,7 +91,7 @@
 
           <div class="card">
             <div class="card-header-flex">
-              <h2>Student Roster (<span id="student-count">0</span>)</h2>
+              <h2>Ambition Group Roster (<span id="student-count">0</span>)</h2>
               <button id="refresh-roster-btn" class="btn btn-outline btn-sm">Refresh</button>
             </div>
             <div class="table-wrapper">
@@ -216,7 +216,7 @@
 
           <div class="card">
             <h2>Recent Mock Exam Records</h2>
-            <p class="muted">All logged mock results across your 5.5–6.5 group:</p>
+            <p class="muted">All logged mock results across Ambition Group:</p>
             <div class="table-wrapper">
               <table>
                 <thead>
@@ -241,8 +241,13 @@
       <!-- 1. STUDENT HOME (Action-Focused Daily Hub) -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
-          <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
-          <p class="muted" style="margin-bottom:0;">Complete today's vocabulary review and check your upcoming homework deadlines.</p>
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div>
+              <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
+              <p class="muted" style="margin-bottom:0;">Ambition Group Daily Hub — complete today's vocabulary review and check your upcoming homework deadlines.</p>
+            </div>
+            <span class="badge badge-blue" style="font-size:12px;padding:6px 12px;">AMBITION GROUP</span>
+          </div>
         </div>
 
         <div class="stats-grid" style="margin-bottom: 20px;">
@@ -269,7 +274,6 @@
         </div>
       </section>
 
-      <!-- 2. DAILY ANKI ENGINE -->
       <!-- 2. DAILY ANKI ENGINE -->
       <section id="student-anki" class="view-section hidden">
         <div class="anki-header" style="flex-wrap:wrap;gap:12px;">
@@ -415,15 +419,15 @@
         <div class="grid-2col" style="margin-bottom: 24px;">
           <div class="card">
             <h3>Your IELTS Score Trajectory</h3>
-            <p class="muted">Tracks every rise and drop across Homework & Mock Exams:</p>
+            <p class="muted">Tracks every rise and drop across 40-question Tests & Mock Exams:</p>
             <div style="position:relative;height:280px;width:100%;">
               <canvas id="student-score-chart"></canvas>
             </div>
           </div>
 
           <div class="card">
-            <h3>You vs. Group Benchmark (Anonymous)</h3>
-            <p class="muted">Compare your latest Mock Exam bands against the class average and highest score:</p>
+            <h3>You vs. Ambition Group Benchmark</h3>
+            <p class="muted">Compare your latest Mock Exam bands against the group average and highest score:</p>
             <div style="position:relative;height:280px;width:100%;">
               <canvas id="group-compare-chart"></canvas>
             </div>
@@ -439,8 +443,8 @@
           </div>
 
           <div class="card">
-            <h3>Group Common Mistakes</h3>
-            <p class="muted">Most missed IELTS question types across the entire class:</p>
+            <h3>Ambition Group Common Mistakes</h3>
+            <p class="muted">Most missed IELTS question types across the entire group:</p>
             <div id="group-common-mistakes"></div>
           </div>
         </div>
@@ -505,7 +509,7 @@
           <div class="card-header-flex" style="flex-wrap:wrap;">
             <div>
               <h2>Practice & Video Library</h2>
-              <p class="muted" style="margin-bottom:0;">Curated materials for daily Shadowing, Active Listening, and Active Reading.</p>
+              <p class="muted" style="margin-bottom:0;">Curated Ambition Group materials for daily Shadowing, Active Listening, and Active Reading.</p>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;" id="resource-filter-bar">
               <button class="btn btn-primary btn-sm res-filter-btn" data-cat="all">All</button>
