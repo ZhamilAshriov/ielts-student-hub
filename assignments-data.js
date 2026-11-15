@@ -10,12 +10,20 @@ export const ASSIGNMENTS = [
     instructions: "Complete Sections 1–6 and Sections 53–58 from the grammar book. Take clear photos/screenshots of your completed pages and upload them below."
   },
   {
-    id: "HW-02",
-    title: "Listening: 2 Full Practice Tests",
+    id: "HW-02A",
+    title: "Listening Practice Test 1 (out of 40)",
     skill: "listening",
     dueDate: "2026-11-17T12:00",
-    totalQuestions: 80,
-    instructions: "Complete two full Listening practice tests (80 questions total). Combine or upload a screenshot showing your final results, enter your total correct score out of 80, and log any question-type mistakes."
+    totalQuestions: 40,
+    instructions: "Complete Listening Practice Test 1 (40 questions). Upload a clear screenshot of your final score screen, enter your score out of 40, and log how many mistakes you made in each Listening question type."
+  },
+  {
+    id: "HW-02B",
+    title: "Listening Practice Test 2 (out of 40)",
+    skill: "listening",
+    dueDate: "2026-11-17T12:00",
+    totalQuestions: 40,
+    instructions: "Complete Listening Practice Test 2 (40 questions). Upload a clear screenshot of your final score screen, enter your score out of 40, and log how many mistakes you made in each Listening question type."
   },
   {
     id: "HW-03",
