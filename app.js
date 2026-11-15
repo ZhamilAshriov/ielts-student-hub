@@ -56,6 +56,7 @@ let ankiQueue = [];
 let currentCard = null;
 let isCardFlipped = false;
 let bonusMode = false;
+let selectedDeckId = "all";
 let studentSubmissionsMap = {};
 let studentMocksList = [];
 let allGroupUsers = [];
@@ -799,63 +800,106 @@ function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(
 // ==========================================
 // STUDENT: INITIALIZATION & ANKI ENGINE
 // ==========================================
-function getAllVocabCards() {
+function getFilteredVocabCards() {
   const all = [];
   VOCAB_DECKS.forEach((deck) => {
-    deck.cards.forEach((c) => all.push({ ...c, deckTitle: deck.title }));
+    if (selectedDeckId === "all" || deck.deckId === selectedDeckId) {
+      deck.cards.forEach((c) => all.push({ ...c, deckId: deck.deckId, deckTitle: deck.title }));
+    }
   });
   return all;
 }
 
-async function initStudentData() {
-  const [usersSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
-    getDocs(collection(db, "users")),
-    getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
-    getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
-    getDocs(collection(db, "mockScores"))
-  ]);
-
-  allGroupUsers = [];
-  usersSnap.forEach((d) => {
-    if (d.data().role === "student") allGroupUsers.push(d.data());
+function getAllDueCountAcrossAllDecks() {
+  const today = getTodayStr();
+  let totalDue = 0;
+  VOCAB_DECKS.forEach((deck) => {
+    deck.cards.forEach((card) => {
+      if (!ankiProgressMap[card.id] || ankiProgressMap[card.id].nextReviewDate <= today) {
+        totalDue++;
+      }
+    });
   });
-
-  const me = allGroupUsers.find((u) => u.studentId === currentStudentId);
-  currentStudentProfile = me || { studentId: currentStudentId, fullName: currentStudentId, ankiStats: {}, permanentMistakes: {} };
-
-  document.getElementById("user-display-name").textContent = currentStudentProfile.fullName;
-  document.getElementById("welcome-student-name").textContent = currentStudentProfile.fullName;
-
-  ankiProgressMap = {};
-  progSnap.forEach((d) => { ankiProgressMap[d.data().cardId] = d.data(); });
-
-  studentSubmissionsMap = {};
-  subsSnap.forEach((d) => { studentSubmissionsMap[d.data().assignmentId] = d.data(); });
-
-  allGroupMocks = [];
-  mocksSnap.forEach((d) => allGroupMocks.push(d.data()));
-  allGroupMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-
-  studentMocksList = allGroupMocks.filter((m) => m.studentId === currentStudentId);
-
-  bonusMode = false;
-  buildAnkiQueue();
-  updateDashboardUI();
-  renderAssignmentsList();
-  renderResourcesList("all");
+  return totalDue;
 }
 
+function populateAnkiDeckDropdown() {
+  const sel = document.getElementById("anki-deck-select");
+  if (!sel) return;
+  const today = getTodayStr();
+
+  const totalDue = getAllDueCountAcrossAllDecks();
+  const optionsHtml = [
+    `<option value="all" ${selectedDeckId === "all" ? "selected" : ""}>All Decks (${totalDue} due)</option>`
+  ];
+
+  VOCAB_DECKS.forEach((deck) => {
+    const deckDue = deck.cards.filter(
+      (c) => !ankiProgressMap[c.id] || ankiProgressMap[c.id].nextReviewDate <= today
+    ).length;
+    optionsHtml.push(
+      `<option value="${escapeHtml(deck.deckId)}" ${selectedDeckId === deck.deckId ? "selected" : ""}>${escapeHtml(deck.title)} (${deckDue} due)</option>`
+    );
+  });
+
+  sel.innerHTML = optionsHtml.join("");
+}
+
+function speakEnglishText(rawText, isWord = true) {
+  if (!("speechSynthesis" in window) || !rawText) return;
+  window.speechSynthesis.cancel();
+
+  // Strip "(adj.)", "(adv.)", "(n.)" and expand "/" alternatives cleanly for natural speech
+  let clean = rawText;
+  if (isWord) {
+    clean = clean
+      .replace(/\((adj|adv|n|v|phr|prep)\.\)/gi, "")
+      .replace(/\s*\/\s*/g, ", ")
+      .trim();
+  }
+
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.lang = "en-GB";
+  utterance.rate = isWord ? 0.92 : 0.96;
+
+  const voices = window.speechSynthesis.getVoices();
+  const preferredVoice =
+    voices.find((v) => v.lang.startsWith("en-GB") && v.name.includes("Google")) ||
+    voices.find((v) => v.lang.startsWith("en-GB")) ||
+    voices.find((v) => v.lang.startsWith("en-"));
+  if (preferredVoice) utterance.voice = preferredVoice;
+
+  window.speechSynthesis.speak(utterance);
+}
+
+document.getElementById("anki-deck-select").addEventListener("change", (e) => {
+  selectedDeckId = e.target.value;
+  bonusMode = false;
+  buildAnkiQueue();
+});
+
+document.getElementById("speak-word-btn").addEventListener("click", (e) => {
+  e.stopPropagation(); // Prevent flipping card when clicking Listen
+  if (currentCard) speakEnglishText(currentCard.word, true);
+});
+
+document.getElementById("speak-example-btn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  if (currentCard) speakEnglishText(currentCard.example, false);
+});
+
 function buildAnkiQueue() {
-  const allCards = getAllVocabCards();
+  populateAnkiDeckDropdown();
+  const filteredCards = getFilteredVocabCards();
   const today = getTodayStr();
   ankiQueue = bonusMode
-    ? [...allCards]
-    : allCards.filter((card) => !ankiProgressMap[card.id] || ankiProgressMap[card.id].nextReviewDate <= today);
+    ? [...filteredCards]
+    : filteredCards.filter((card) => !ankiProgressMap[card.id] || ankiProgressMap[card.id].nextReviewDate <= today);
   renderNextAnkiCard();
 }
 
 function updateDashboardUI() {
-  const dueCount = ankiQueue.length;
+  const totalDue = getAllDueCountAcrossAllDecks();
   const stats = currentStudentProfile.ankiStats || {};
   const today = getTodayStr();
   const yesterday = getTodayStr(-1);
@@ -866,9 +910,9 @@ function updateDashboardUI() {
 
   const pendingHw = ASSIGNMENTS.filter((a) => !studentSubmissionsMap[a.id]).length;
 
-  document.getElementById("nav-due-badge").textContent = bonusMode ? 0 : dueCount;
+  document.getElementById("nav-due-badge").textContent = totalDue;
   document.getElementById("nav-hw-badge").textContent = pendingHw;
-  document.getElementById("dash-due-count").textContent = bonusMode ? 0 : dueCount;
+  document.getElementById("dash-due-count").textContent = totalDue;
   document.getElementById("dash-streak-count").textContent = `🔥 ${activeStreak} days`;
   document.getElementById("dash-today-done").textContent = `${todayCount} reviewed today`;
   document.getElementById("dash-hw-pending").textContent = pendingHw;
@@ -1047,6 +1091,7 @@ document.addEventListener("keydown", (e) => {
   } else if (isCardFlipped && ["1", "2", "3", "4"].includes(e.key)) {
     gradeCurrentCard(Number(e.key));
   }
+  
 });
 
 function calcSM2(prev, quality) {
