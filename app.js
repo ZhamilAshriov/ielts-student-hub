@@ -22,6 +22,11 @@ import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
 import { RESOURCES } from "./resources-data.js";
 
+// Register Service Worker for PWA Desktop/Mobile Install
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("./sw.js").catch(() => {});
+}
+
 const firebaseConfig = {
   apiKey: "AIzaSyDrGjx51H42h6Pkg44RIpZo0vyZApz8SGA",
   authDomain: "zhamil-ielts-hub.firebaseapp.com",
@@ -44,6 +49,7 @@ const secondaryAuth = getAuth(secondaryApp);
 const DOMAIN = "@zhamil-hub.local";
 const TEACHER_EMAIL = "teacher" + DOMAIN;
 
+// Student Session State
 let currentStudentId = null;
 let currentStudentProfile = null;
 let ankiProgressMap = {};
@@ -52,7 +58,18 @@ let currentCard = null;
 let isCardFlipped = false;
 let bonusMode = false;
 let studentSubmissionsMap = {};
+let studentMocksList = [];
 
+// Chart Instances
+let studentChartInstance = null;
+let inspectorChartInstance = null;
+
+// Cached Teacher Data
+let cachedStudents = [];
+let cachedSubmissions = [];
+let cachedMocks = [];
+
+// Audio Recorder State
 let mediaRecorder = null;
 let recordedChunks = [];
 let recordedAudioBlob = null;
@@ -74,6 +91,11 @@ function rawToIeltsBand(raw, total = 40) {
   return 4.0;
 }
 
+function calcOverallIelts(l, r, w, s) {
+  const avg = (Number(l) + Number(r) + Number(w) + Number(s)) / 4;
+  return Math.round(avg * 2) / 2;
+}
+
 function getTodayStr(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -92,6 +114,20 @@ function formatLoginEmail(rawId) {
   const clean = rawId.trim().toLowerCase();
   return clean.includes("@") ? clean : clean + DOMAIN;
 }
+
+const MISTAKE_LABELS = {
+  TFNG: "True / False / Not Given",
+  YNNG: "Yes / No / Not Given",
+  MATCHING_HEADINGS: "Matching Headings",
+  MCQ: "Multiple Choice",
+  GAP_FILL: "Summary / Note / Table Completion",
+  MATCHING_INFO: "Matching Information / Features",
+  MATCHING: "Listening: Matching",
+  MAP_DIAGRAM: "Listening: Plan, Map, or Diagram",
+  FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary",
+  SENTENCE_COMPLETION: "Listening: Sentence Completion",
+  SHORT_ANSWER: "Listening: Short-Answer Questions"
+};
 
 // ==========================================
 // AUTHENTICATION & ROUTING
@@ -141,6 +177,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("user-display-name").textContent = "Zhamil";
     document.getElementById("teacher-nav").classList.remove("hidden");
     document.getElementById("student-nav").classList.add("hidden");
+    document.getElementById("mock-date-input").value = getTodayStr();
     switchView("teacher-roster");
     loadTeacherData();
   } else {
@@ -180,26 +217,33 @@ document.getElementById("dash-go-hw-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// TEACHER: ROSTER, HW MATRIX & SUBMISSIONS
+// TEACHER: ROSTER, MATRIX, GRADING & MOCKS
 // ==========================================
 async function loadTeacherData() {
-  const [usersSnap, subsSnap] = await Promise.all([
+  const [usersSnap, subsSnap, mocksSnap] = await Promise.all([
     getDocs(collection(db, "users")),
-    getDocs(collection(db, "submissions"))
+    getDocs(collection(db, "submissions")),
+    getDocs(collection(db, "mockScores"))
   ]);
 
-  const students = [];
+  cachedStudents = [];
   usersSnap.forEach((d) => {
-    if (d.data().role === "student") students.push(d.data());
+    if (d.data().role === "student") cachedStudents.push(d.data());
   });
-  students.sort((a, b) => a.studentId.localeCompare(b.studentId));
+  cachedStudents.sort((a, b) => a.studentId.localeCompare(b.studentId));
 
-  const allSubmissions = [];
-  subsSnap.forEach((d) => allSubmissions.push({ docId: d.id, ...d.data() }));
+  cachedSubmissions = [];
+  subsSnap.forEach((d) => cachedSubmissions.push({ docId: d.id, ...d.data() }));
 
-  renderTeacherRoster(students);
-  renderTeacherHwMatrix(students, allSubmissions);
-  renderTeacherGradingQueue(students, allSubmissions);
+  cachedMocks = [];
+  mocksSnap.forEach((d) => cachedMocks.push({ docId: d.id, ...d.data() }));
+  cachedMocks.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+
+  renderTeacherRoster(cachedStudents);
+  renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+  renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+  populateMockStudentDropdown(cachedStudents);
+  renderRecentMocksTable(cachedStudents, cachedMocks);
 }
 
 const createStudentForm = document.getElementById("create-student-form");
@@ -263,14 +307,109 @@ function renderTeacherRoster(students) {
         <tr>
           <td><strong>${s.studentId}</strong></td>
           <td>${s.fullName}</td>
-          <td>🔥 ${stats.streak || 0} days</td>
-          <td>${reviewedToday > 0 ? `<span style="color:var(--success);font-weight:600;">${reviewedToday} cards</span>` : `<span class="muted">0 cards</span>`}</td>
-          <td>${stats.totalReviewed || 0}</td>
+          <td>🔥 ${stats.streak || 0}d</td>
+          <td>${reviewedToday > 0 ? `<span style="color:var(--success);font-weight:600;">${reviewedToday}</span>` : `<span class="muted">0</span>`}</td>
+          <td><button class="btn btn-outline btn-sm" onclick="window.inspectStudent('${s.studentId}')">Inspect Stats</button></td>
         </tr>
       `;
     })
     .join("");
 }
+
+window.inspectStudent = function (studentId) {
+  const student = cachedStudents.find((s) => s.studentId === studentId);
+  if (!student) return;
+
+  const card = document.getElementById("teacher-inspector-card");
+  card.classList.remove("hidden");
+  document.getElementById("inspector-student-title").textContent = `${student.fullName} (${student.studentId}) — Performance Profile`;
+
+  const sSubs = cachedSubmissions.filter((sub) => sub.studentId === studentId);
+  const sMocks = cachedMocks.filter((m) => m.studentId === studentId);
+
+  inspectorChartInstance = buildScoreChart("inspector-score-chart", sSubs, sMocks, inspectorChartInstance);
+  renderPermanentMistakes("inspector-mistakes-box", student.permanentMistakes || {});
+  card.scrollIntoView({ behavior: "smooth" });
+};
+
+document.getElementById("close-inspector-btn").addEventListener("click", () => {
+  document.getElementById("teacher-inspector-card").classList.add("hidden");
+});
+
+function populateMockStudentDropdown(students) {
+  const sel = document.getElementById("mock-student-select");
+  const currentVal = sel.value;
+  sel.innerHTML = `<option value="">-- Choose Student --</option>` +
+    students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
+  if (currentVal) sel.value = currentVal;
+}
+
+function renderRecentMocksTable(students, mocks) {
+  const tbody = document.getElementById("recent-mocks-tbody");
+  if (mocks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted center">No mock scores logged yet.</td></tr>`;
+    return;
+  }
+
+  const nameMap = {};
+  students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
+
+  tbody.innerHTML = mocks.map((m) => `
+    <tr>
+      <td>${m.date || "—"}</td>
+      <td><strong>${m.studentId}</strong><br><span class="muted" style="font-size:12px;">${nameMap[m.studentId] || ""}</span></td>
+      <td>${escapeHtml(m.mockTitle)}</td>
+      <td>${m.listening} / ${m.reading} / ${m.writing} / ${m.speaking}</td>
+      <td><span class="badge badge-blue">Band ${m.overall}</span></td>
+    </tr>
+  `).join("");
+}
+
+document.getElementById("mock-score-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const msgEl = document.getElementById("mock-save-msg");
+  const btn = document.getElementById("save-mock-btn");
+
+  const studentId = document.getElementById("mock-student-select").value;
+  const mockTitle = document.getElementById("mock-title-input").value.trim();
+  const date = document.getElementById("mock-date-input").value;
+  const listening = Number(document.getElementById("mock-l").value);
+  const reading = Number(document.getElementById("mock-r").value);
+  const writing = Number(document.getElementById("mock-w").value);
+  const speaking = Number(document.getElementById("mock-s").value);
+  const overall = calcOverallIelts(listening, reading, writing, speaking);
+
+  btn.disabled = true;
+  btn.textContent = "Saving...";
+  msgEl.textContent = "";
+
+  try {
+    const docId = `${date}_${studentId}_${Date.now()}`;
+    await setDoc(doc(db, "mockScores", docId), {
+      studentId,
+      mockTitle,
+      date,
+      listening,
+      reading,
+      writing,
+      speaking,
+      overall,
+      createdAt: serverTimestamp()
+    });
+
+    msgEl.style.color = "var(--success)";
+    msgEl.textContent = `Saved ${mockTitle} for ${studentId} (Overall Band ${overall})!`;
+    document.getElementById("mock-score-form").reset();
+    document.getElementById("mock-date-input").value = getTodayStr();
+    loadTeacherData();
+  } catch (err) {
+    msgEl.style.color = "var(--danger)";
+    msgEl.textContent = "Error saving mock score: " + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Save Mock Score";
+  }
+});
 
 function renderTeacherHwMatrix(students, submissions) {
   const container = document.getElementById("hw-matrix-container");
@@ -332,7 +471,7 @@ function renderTeacherGradingQueue(students, submissions) {
     if (sub.skill === "reading" || sub.skill === "listening") {
       const mistakesSummary = Object.entries(sub.mistakeCounts || {})
         .filter(([, count]) => count > 0)
-        .map(([type, count]) => `<span class="q-tag">${type}: ${count} wrong</span>`)
+        .map(([type, count]) => `<span class="q-tag">${MISTAKE_LABELS[type] || type}: ${count} wrong</span>`)
         .join(" ");
 
       contentHtml = `
@@ -419,6 +558,144 @@ document.getElementById("refresh-matrix-btn").addEventListener("click", loadTeac
 document.getElementById("refresh-grading-btn").addEventListener("click", loadTeacherData);
 
 // ==========================================
+// SHARED ANALYTICS RENDERERS (CHARTS & MISTAKES)
+// ==========================================
+function buildScoreChart(canvasId, submissions, mocks, existingChart) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === "undefined") return existingChart;
+  if (existingChart) existingChart.destroy();
+
+  // Combine chronologically: Mock Exams + Graded/Submitted Homework with Band Scores
+  const events = [];
+
+  mocks.forEach((m) => {
+    events.push({
+      sortKey: m.date || "2026-01-01",
+      label: m.mockTitle || "Mock Exam",
+      listening: m.listening,
+      reading: m.reading,
+      writing: m.writing,
+      speaking: m.speaking,
+      overall: m.overall
+    });
+  });
+
+  submissions.forEach((sub) => {
+    if (!sub.bandScore) return;
+    const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+    const dateStr = sub.submittedAt?.toDate
+      ? sub.submittedAt.toDate().toISOString().split("T")[0]
+      : (hw ? hw.dueDate.split("T")[0] : "2026-11-15");
+
+    events.push({
+      sortKey: dateStr,
+      label: `${sub.assignmentId} (${sub.skill.toUpperCase()})`,
+      listening: sub.skill === "listening" ? sub.bandScore : null,
+      reading: sub.skill === "reading" ? sub.bandScore : null,
+      writing: sub.skill === "writing" ? sub.bandScore : null,
+      speaking: sub.skill === "speaking" ? sub.bandScore : null,
+      overall: null
+    });
+  });
+
+  events.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+
+  const labels = events.length > 0 ? events.map((e) => e.label) : ["No Scores Yet"];
+
+  return new Chart(canvas, {
+    type: "line",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Overall (Mock)",
+          data: events.map((e) => e.overall),
+          borderColor: "#0f172a",
+          backgroundColor: "#0f172a",
+          borderWidth: 3,
+          spanGaps: true,
+          tension: 0.25
+        },
+        {
+          label: "Listening",
+          data: events.map((e) => e.listening),
+          borderColor: "#1d4ed8",
+          backgroundColor: "#1d4ed8",
+          spanGaps: true,
+          tension: 0.25
+        },
+        {
+          label: "Reading",
+          data: events.map((e) => e.reading),
+          borderColor: "#16a34a",
+          backgroundColor: "#16a34a",
+          spanGaps: true,
+          tension: 0.25
+        },
+        {
+          label: "Writing",
+          data: events.map((e) => e.writing),
+          borderColor: "#d97706",
+          backgroundColor: "#d97706",
+          spanGaps: true,
+          tension: 0.25
+        },
+        {
+          label: "Speaking",
+          data: events.map((e) => e.speaking),
+          borderColor: "#dc2626",
+          backgroundColor: "#dc2626",
+          spanGaps: true,
+          tension: 0.25
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } }
+      },
+      plugins: {
+        legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+function renderPermanentMistakes(containerId, mistakesObj) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const entries = Object.entries(mistakesObj || {})
+    .map(([type, val]) => ({ type, wrong: val.wrong || 0 }))
+    .filter((item) => item.wrong > 0)
+    .sort((a, b) => b.wrong - a.wrong);
+
+  if (entries.length === 0) {
+    container.innerHTML = `<p class="muted">No question-type mistakes logged yet. They will appear automatically when you submit Reading or Listening homework.</p>`;
+    return;
+  }
+
+  const maxWrong = Math.max(...entries.map((e) => e.wrong), 1);
+
+  container.innerHTML = entries.map((item) => {
+    const pct = Math.round((item.wrong / maxWrong) * 100);
+    return `
+      <div class="type-bar-row">
+        <div class="type-bar-head">
+          <span>${MISTAKE_LABELS[item.type] || item.type}</span>
+          <span style="color:var(--danger);">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width:${pct}%;background:var(--danger);"></div>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+// ==========================================
 // STUDENT: INITIALIZATION & ANKI ENGINE
 // ==========================================
 function getAllVocabCards() {
@@ -430,10 +707,11 @@ function getAllVocabCards() {
 }
 
 async function initStudentData() {
-  const [userSnap, progSnap, subsSnap] = await Promise.all([
+  const [userSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
     getDoc(doc(db, "users", currentStudentId)),
     getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
-    getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId)))
+    getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
+    getDocs(query(collection(db, "mockScores"), where("studentId", "==", currentStudentId)))
   ]);
 
   currentStudentProfile = userSnap.exists()
@@ -448,6 +726,10 @@ async function initStudentData() {
 
   studentSubmissionsMap = {};
   subsSnap.forEach((d) => { studentSubmissionsMap[d.data().assignmentId] = d.data(); });
+
+  studentMocksList = [];
+  mocksSnap.forEach((d) => studentMocksList.push(d.data()));
+  studentMocksList.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
 
   bonusMode = false;
   buildAnkiQueue();
@@ -466,8 +748,6 @@ function buildAnkiQueue() {
 }
 
 function updateDashboardUI() {
-  const allCards = getAllVocabCards();
-  const seenCount = Object.keys(ankiProgressMap).length;
   const dueCount = ankiQueue.length;
   const stats = currentStudentProfile.ankiStats || {};
   const today = getTodayStr();
@@ -485,7 +765,38 @@ function updateDashboardUI() {
   document.getElementById("dash-streak-count").textContent = `🔥 ${activeStreak} days`;
   document.getElementById("dash-today-done").textContent = `${todayCount} reviewed today`;
   document.getElementById("dash-hw-pending").textContent = pendingHw;
-  document.getElementById("dash-mastered-count").textContent = `${seenCount} / ${allCards.length}`;
+
+  // Latest Mock Score Box
+  if (studentMocksList.length > 0) {
+    const latest = studentMocksList[studentMocksList.length - 1];
+    document.getElementById("dash-latest-band").textContent = `Band ${latest.overall}`;
+    document.getElementById("dash-latest-mock-label").textContent = latest.mockTitle;
+  } else {
+    document.getElementById("dash-latest-band").textContent = "—";
+    document.getElementById("dash-latest-mock-label").textContent = "No mock logged yet";
+  }
+
+  // Render Score Trajectory Chart, Permanent Mistake Profile & Mock History Table
+  const subsArr = Object.values(studentSubmissionsMap);
+  studentChartInstance = buildScoreChart("student-score-chart", subsArr, studentMocksList, studentChartInstance);
+  renderPermanentMistakes("dash-permanent-mistakes", currentStudentProfile.permanentMistakes || {});
+
+  const mocksTbody = document.getElementById("student-mocks-tbody");
+  if (studentMocksList.length === 0) {
+    mocksTbody.innerHTML = `<tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>`;
+  } else {
+    mocksTbody.innerHTML = [...studentMocksList].reverse().map((m) => `
+      <tr>
+        <td>${m.date || "—"}</td>
+        <td><strong>${escapeHtml(m.mockTitle)}</strong></td>
+        <td>${m.listening}</td>
+        <td>${m.reading}</td>
+        <td>${m.writing}</td>
+        <td>${m.speaking}</td>
+        <td><span class="badge badge-blue">Band ${m.overall}</span></td>
+      </tr>
+    `).join("");
+  }
 }
 
 function renderNextAnkiCard() {
@@ -956,7 +1267,7 @@ window.openAnalysisPage = function (assignmentId) {
   document.getElementById("ana-type-breakdown").innerHTML = logged.length > 0
     ? logged.map(([type, count]) => `
         <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
-          <strong>${type.replace(/_/g, " ")}</strong>
+          <strong>${MISTAKE_LABELS[type] || type}</strong>
           <span class="badge badge-red">${count} mistake${count > 1 ? "s" : ""}</span>
         </div>
       `).join("")
