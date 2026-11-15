@@ -1036,6 +1036,50 @@ async function submitSpeakingHomework(hw) {
     btn.textContent = "Upload & Submit Recording";
   }
 }
+async function submitGrammarHomework(hw) {
+  const file = document.getElementById("gram-file").files[0];
+  const notes = document.getElementById("gram-notes").value.trim();
+  if (!file) return alert("Please select a photo or screenshot of your completed grammar pages.");
+
+  const btn = document.getElementById("submit-gram-btn");
+  btn.disabled = true;
+  btn.textContent = "Uploading image...";
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, {
+      method: "POST",
+      body: formData
+    });
+    const data = await res.json();
+    if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
+
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id,
+      studentId: currentStudentId,
+      skill: "grammar",
+      status: "submitted",
+      isLate,
+      submittedAt: serverTimestamp(),
+      screenshotUrl: data.secure_url,
+      notes
+    };
+
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Grammar homework uploaded!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Upload error: " + err.message);
+    btn.disabled = false;
+    btn.textContent = "Upload & Submit Grammar Homework";
+  }
+}
 
 function escapeHtml(str) {
   return String(str)
