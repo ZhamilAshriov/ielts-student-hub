@@ -12,6 +12,7 @@ import {
   setDoc,
   getDoc,
   updateDoc,
+  deleteDoc,
   collection,
   getDocs,
   query,
@@ -61,6 +62,7 @@ let studentSubmissionsMap = {};
 let studentMocksList = [];
 let allGroupUsers = [];
 let allGroupMocks = [];
+let cachedAnnouncements = [];
 
 // Chart Instances
 let studentChartInstance = null;
@@ -116,6 +118,29 @@ function formatDueDate(isoStr) {
 function formatLoginEmail(rawId) {
   const clean = rawId.trim().toLowerCase();
   return clean.includes("@") ? clean : clean + DOMAIN;
+}
+
+function sortAnnouncementsList(list) {
+  return [...list].sort((a, b) => {
+    if (Boolean(b.pinned) !== Boolean(a.pinned)) return b.pinned ? 1 : -1;
+    const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAtMs || 0);
+    const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAtMs || 0);
+    return tB - tA;
+  });
+}
+
+function formatAnnouncementDate(ann) {
+  if (ann.createdAt?.toDate) {
+    return ann.createdAt.toDate().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+  return ann.dateLabel || "Recent";
+}
+
+function getAnnouncementBadgeClass(tag) {
+  if (tag === "URGENT") return "badge-red";
+  if (tag === "MOCK EXAM") return "badge-blue";
+  if (tag === "NEW MATERIAL") return "badge-green";
+  return "badge-gray";
 }
 
 const MISTAKE_LABELS = {
@@ -225,13 +250,14 @@ document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// TEACHER: ROSTER, MATRIX, GRADING & MOCKS
+// TEACHER: ROSTER, MATRIX, GRADING, MOCKS & ANNOUNCEMENTS
 // ==========================================
 async function loadTeacherData() {
-  const [usersSnap, subsSnap, mocksSnap] = await Promise.all([
+  const [usersSnap, subsSnap, mocksSnap, annSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(collection(db, "submissions")),
-    getDocs(collection(db, "mockScores"))
+    getDocs(collection(db, "mockScores")),
+    getDocs(collection(db, "announcements"))
   ]);
 
   cachedStudents = [];
@@ -247,11 +273,16 @@ async function loadTeacherData() {
   mocksSnap.forEach((d) => cachedMocks.push({ docId: d.id, ...d.data() }));
   cachedMocks.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
 
+  const rawAnns = [];
+  annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
+  cachedAnnouncements = sortAnnouncementsList(rawAnns);
+
   renderTeacherRoster(cachedStudents);
   renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
   populateMockStudentDropdown(cachedStudents);
   renderRecentMocksTable(cachedStudents, cachedMocks);
+  renderTeacherAnnouncementsList(cachedAnnouncements);
 }
 
 const createStudentForm = document.getElementById("create-student-form");
@@ -296,6 +327,83 @@ createStudentForm.addEventListener("submit", async (e) => {
     btn.textContent = "Create Account";
   }
 });
+
+// Teacher Announcements Form & List
+const announcementForm = document.getElementById("announcement-form");
+if (announcementForm) {
+  announcementForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("ann-post-msg");
+    const btn = document.getElementById("post-ann-btn");
+
+    const title = document.getElementById("ann-title").value.trim();
+    const tag = document.getElementById("ann-tag").value;
+    const body = document.getElementById("ann-body").value.trim();
+    const pinned = document.getElementById("ann-pinned").checked;
+
+    btn.disabled = true;
+    btn.textContent = "Publishing...";
+    msgEl.textContent = "";
+
+    try {
+      const docId = `ANN_${Date.now()}`;
+      await setDoc(doc(db, "announcements", docId), {
+        title,
+        tag,
+        body,
+        pinned,
+        dateLabel: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+        createdAtMs: Date.now(),
+        createdAt: serverTimestamp()
+      });
+
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = "Announcement published to all student dashboards!";
+      announcementForm.reset();
+      loadTeacherData();
+    } catch (err) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.textContent = "Error publishing announcement: " + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Publish Announcement";
+    }
+  });
+}
+
+function renderTeacherAnnouncementsList(list) {
+  const container = document.getElementById("teacher-ann-list");
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = `<p class="muted center">No announcements published yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = list.map((ann) => `
+    <div class="hw-item" style="flex-direction:column;align-items:stretch;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+        <div>
+          ${ann.pinned ? `<span class="badge badge-yellow" style="margin-right:4px;">📌 Pinned</span>` : ""}
+          <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
+          <span class="muted" style="font-size:12px;margin-left:6px;">${formatAnnouncementDate(ann)}</span>
+          <h3 style="margin-top:6px;">${escapeHtml(ann.title)}</h3>
+        </div>
+        <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteAnnouncement('${ann.docId}')">Delete</button>
+      </div>
+      <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);">${escapeHtml(ann.body)}</p>
+    </div>
+  `).join("");
+}
+
+window.deleteAnnouncement = async function (docId) {
+  if (!confirm("Delete this announcement?")) return;
+  await deleteDoc(doc(db, "announcements", docId));
+  loadTeacherData();
+};
+
+const refreshAnnBtn = document.getElementById("refresh-ann-btn");
+if (refreshAnnBtn) refreshAnnBtn.addEventListener("click", loadTeacherData);
 
 function renderTeacherRoster(students) {
   const tbody = document.getElementById("roster-table-body");
@@ -801,11 +909,12 @@ function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(
 // STUDENT: INITIALIZATION & ANKI ENGINE
 // ==========================================
 async function initStudentData() {
-  const [usersSnap, progSnap, subsSnap, mocksSnap] = await Promise.all([
+  const [usersSnap, progSnap, subsSnap, mocksSnap, annSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
     getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
-    getDocs(collection(db, "mockScores"))
+    getDocs(collection(db, "mockScores")),
+    getDocs(collection(db, "announcements"))
   ]);
 
   allGroupUsers = [];
@@ -831,12 +940,39 @@ async function initStudentData() {
 
   studentMocksList = allGroupMocks.filter((m) => m.studentId === currentStudentId);
 
+  const rawAnns = [];
+  annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
+  cachedAnnouncements = sortAnnouncementsList(rawAnns);
+
   bonusMode = false;
   selectedDeckId = "all";
   buildAnkiQueue();
   updateDashboardUI();
+  renderStudentAnnouncements(cachedAnnouncements);
   renderAssignmentsList();
   renderResourcesList("all");
+}
+
+function renderStudentAnnouncements(list) {
+  const container = document.getElementById("student-announcements-feed");
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = `<p class="muted" style="margin-bottom:0;">No announcements from your teacher yet.</p>`;
+    return;
+  }
+
+  container.innerHTML = list.map((ann) => `
+    <div class="hw-item" style="flex-direction:column;align-items:stretch;${ann.pinned ? "border-left:4px solid var(--primary);background:#f8fafc;" : ""}">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
+        <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
+        <strong>${escapeHtml(ann.title)}</strong>
+        <span class="muted" style="font-size:12px;margin-left:auto;margin-bottom:0;">${formatAnnouncementDate(ann)}</span>
+      </div>
+      <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</p>
+    </div>
+  `).join("");
 }
 
 function getFilteredVocabCards() {
