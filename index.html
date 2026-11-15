@@ -270,15 +270,21 @@
       </section>
 
       <!-- 2. DAILY ANKI ENGINE -->
+      <!-- 2. DAILY ANKI ENGINE -->
       <section id="student-anki" class="view-section hidden">
-        <div class="anki-header">
+        <div class="anki-header" style="flex-wrap:wrap;gap:12px;">
           <div>
             <h2>Daily Vocabulary Review</h2>
             <p class="muted" style="margin-bottom:0;" id="anki-deck-subtitle">Loading your spaced-repetition queue...</p>
           </div>
-          <div class="anki-counters">
-            <span class="counter-pill new-pill">New: <strong id="anki-new-count">0</strong></span>
-            <span class="counter-pill due-pill">Review: <strong id="anki-review-count">0</strong></span>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <select id="anki-deck-select" style="padding:7px 12px;min-width:220px;font-weight:600;">
+              <option value="all">All Decks (Due Today)</option>
+            </select>
+            <div class="anki-counters">
+              <span class="counter-pill new-pill">New: <strong id="anki-new-count">0</strong></span>
+              <span class="counter-pill due-pill">Review: <strong id="anki-review-count">0</strong></span>
+            </div>
           </div>
         </div>
 
@@ -288,7 +294,10 @@
             
             <div class="card-front">
               <div class="word-display" id="card-word">Loading...</div>
-              <p class="flip-hint">Click card or press <kbd>Space</kbd> to show meaning</p>
+              <div style="margin: 12px 0;">
+                <button type="button" id="speak-word-btn" class="btn btn-outline btn-sm" title="Press R to replay pronunciation">🔊 Listen</button>
+              </div>
+              <p class="flip-hint">Click card or press <kbd>Space</kbd> to show meaning • Press <kbd>R</kbd> to listen</p>
             </div>
 
             <div id="card-back" class="card-back hidden">
@@ -298,7 +307,10 @@
                 <p id="card-definition" class="def-text"></p>
               </div>
               <div class="ex-block">
-                <span class="field-label">EXAMPLE SENTENCE</span>
+                <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:4px;">
+                  <span class="field-label" style="margin-bottom:0;">EXAMPLE SENTENCE</span>
+                  <button type="button" id="speak-example-btn" class="btn btn-outline btn-sm" style="padding:3px 10px;font-size:12px;">🔊 Listen to Example</button>
+                </div>
                 <p id="card-example" class="ex-text"></p>
               </div>
             </div>
@@ -330,9 +342,9 @@
 
         <div id="anki-done-state" class="card center hidden" style="padding: 48px 24px;">
           <div style="font-size: 42px; margin-bottom: 12px;">🎉</div>
-          <h2>All Caught Up for Today!</h2>
-          <p class="muted">You have completed all your due vocabulary cards. Come back tomorrow to keep your streak alive.</p>
-          <button id="practice-all-btn" class="btn btn-outline">Practice All Cards Again (Bonus Mode)</button>
+          <h2 id="anki-done-title">All Caught Up for Today!</h2>
+          <p class="muted" id="anki-done-desc">You have completed all your due vocabulary cards in this selection. Switch decks above or come back tomorrow to keep your streak alive.</p>
+          <button id="practice-all-btn" class="btn btn-outline">Practice This Deck Again (Bonus Mode)</button>
         </div>
       </section>
 
