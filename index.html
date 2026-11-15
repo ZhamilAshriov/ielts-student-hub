@@ -62,6 +62,7 @@
       <button class="nav-tab" data-target="teacher-hw-tracker">Homework Matrix</button>
       <button class="nav-tab" data-target="teacher-grading">Grading Queue <span id="nav-grade-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
+      <button class="nav-tab" data-target="teacher-announcements">Announcements</button>
     </nav>
 
     <!-- MAIN CONTENT AREA -->
@@ -238,6 +239,50 @@
           </div>
         </div>
       </section>
+      <!-- 5. TEACHER ANNOUNCEMENTS -->
+      <section id="teacher-announcements" class="view-section hidden">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Post News or Announcement</h2>
+            <p class="muted">Publish updates, mock exam dates, or reminders to every Ambition Group student's Home screen.</p>
+            <form id="announcement-form">
+              <div class="form-group">
+                <label for="ann-title">Title</label>
+                <input type="text" id="ann-title" placeholder="e.g., Mock Exam #2 Schedule & Rules" required />
+              </div>
+              <div class="form-group">
+                <label for="ann-tag">Category Badge</label>
+                <select id="ann-tag">
+                  <option value="GENERAL">General Update</option>
+                  <option value="MOCK EXAM">Mock Exam</option>
+                  <option value="URGENT">Important / Urgent</option>
+                  <option value="NEW MATERIAL">New Vocab / Homework</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="ann-body">Message</label>
+                <textarea id="ann-body" rows="5" placeholder="Write your announcement details here..." required></textarea>
+              </div>
+              <div class="form-group" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" id="ann-pinned" style="width:auto;" />
+                <label for="ann-pinned" style="margin:0;cursor:pointer;">📌 Pin this announcement to the top</label>
+              </div>
+              <button type="submit" class="btn btn-primary btn-full" id="post-ann-btn">Publish Announcement</button>
+              <p id="ann-post-msg" class="status-msg"></p>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Published Announcements</h2>
+              <button id="refresh-ann-btn" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+            <div id="teacher-ann-list" class="hw-grid">
+              <p class="muted center">Loading announcements...</p>
+            </div>
+          </div>
+        </div>
+      </section>
 
       <!-- ==================== STUDENT VIEWS ==================== -->
       <!-- 1. STUDENT HOME (Action-Focused Daily Hub) -->
@@ -258,6 +303,17 @@
             <span class="stat-value" id="dash-due-count">0</span>
             <button class="btn btn-primary btn-sm" id="dash-start-anki-btn" style="margin-top:10px;">Study Now</button>
           </div>
+          <div class="card">
+          <div class="card-header-flex" style="margin-bottom:12px;">
+            <div>
+              <h3 style="margin-bottom:2px;">📢 Ambition Group News & Announcements</h3>
+              <p class="muted" style="margin-bottom:0;">Latest schedule updates, exam reminders, and group news from your teacher</p>
+            </div>
+          </div>
+          <div id="student-announcements-feed" class="hw-grid">
+            <p class="muted">Loading announcements...</p>
+          </div>
+        </div>
           <div class="stat-box">
             <span class="stat-label">Daily Streak</span>
             <span class="stat-value" id="dash-streak-count">🔥 0 days</span>
