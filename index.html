@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IELTS 5.5–6.5 Student Hub</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- LOGIN SCREEN -->
+  <div id="login-view" class="auth-container">
+    <div class="auth-card">
+      <div class="brand-badge">IELTS 5.5–6.5 HUB</div>
+      <h1>Welcome Back</h1>
+      <p class="subtitle">Enter your Student ID and password to access today's vocabulary, homework, and scores.</p>
+      
+      <form id="login-form">
+        <div class="form-group">
+          <label for="login-id">Student ID</label>
+          <input type="text" id="login-id" placeholder="e.g., ST-101" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="btn btn-primary btn-full" id="login-btn">Sign In</button>
+        <p id="login-error" class="error-msg"></p>
+      </form>
+    </div>
+  </div>
+
+  <!-- MAIN APP SHELL (Hidden until logged in) -->
+  <div id="app-shell" class="hidden">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="logo-text">IELTS Hub</span>
+        <span id="role-badge" class="role-pill">Student</span>
+      </div>
+      <div class="topbar-right">
+        <span id="user-display-name" class="user-name"></span>
+        <button id="logout-btn" class="btn btn-outline btn-sm">Log Out</button>
+      </div>
+    </header>
+
+    <!-- STUDENT NAVIGATION -->
+    <nav id="student-nav" class="subnav hidden">
+      <button class="nav-tab active" data-target="student-dashboard">Dashboard & Stats</button>
+      <button class="nav-tab" data-target="student-anki">Daily Anki</button>
+      <button class="nav-tab" data-target="student-homework">Assignments</button>
+    </nav>
+
+    <!-- TEACHER NAVIGATION -->
+    <nav id="teacher-nav" class="subnav hidden">
+      <button class="nav-tab active" data-target="teacher-roster">Students & Accounts</button>
+      <button class="nav-tab" data-target="teacher-grading">Grading Queue</button>
+      <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
+    </nav>
+
+    <!-- MAIN CONTENT AREA -->
+    <main class="container">
+      <!-- TEACHER: ROSTER & CREATE STUDENT -->
+      <section id="teacher-roster" class="view-section hidden">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Create Student Account</h2>
+            <p class="muted">Generate a login ID and password for a new student in your 5.5–6.5 group.</p>
+            <form id="create-student-form">
+              <div class="form-group">
+                <label for="new-student-name">Full Name</label>
+                <input type="text" id="new-student-name" placeholder="e.g., Aruzhan Kassymova" required />
+              </div>
+              <div class="form-group">
+                <label for="new-student-id">Student ID</label>
+                <input type="text" id="new-student-id" placeholder="e.g., ST-101" required />
+              </div>
+              <div class="form-group">
+                <label for="new-student-pass">Password (min 6 chars)</label>
+                <input type="text" id="new-student-pass" placeholder="e.g., ielts2026" minlength="6" required />
+              </div>
+              <button type="submit" class="btn btn-primary" id="create-student-btn">Create Account</button>
+              <p id="create-student-msg" class="status-msg"></p>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Student Roster (<span id="student-count">0</span>)</h2>
+              <button id="refresh-roster-btn" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Full Name</th>
+                    <th>Anki Streak</th>
+                    <th>Today's Cards</th>
+                  </tr>
+                </thead>
+                <tbody id="roster-table-body">
+                  <tr><td colspan="4" class="muted center">Loading students...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PLACEHOLDER SECTIONS FOR PHASES 2–4 -->
+      <section id="teacher-grading" class="view-section hidden">
+        <div class="card"><h2>Grading Queue</h2><p class="muted">Coming in Phase 3: Review Writing essays and listen to Speaking audio recordings.</p></div>
+      </section>
+
+      <section id="teacher-mocks" class="view-section hidden">
+        <div class="card"><h2>Enter Mock Exam Scores</h2><p class="muted">Coming in Phase 4: Log L/R/W/S Mock Exam band scores into student analytics.</p></div>
+      </section>
+
+      <section id="student-dashboard" class="view-section hidden">
+        <div class="card">
+          <h2>Welcome, <span id="welcome-student-name">Student</span>!</h2>
+          <p class="muted">Your account is active. In Phases 2–4, your score trajectory chart, permanent IELTS mistake breakdown, and daily Anki stats will appear right here.</p>
+        </div>
+      </section>
+
+      <section id="student-anki" class="view-section hidden">
+        <div class="card"><h2>Daily Anki Vocabulary</h2><p class="muted">Coming in Phase 2: Flip cards & spaced repetition.</p></div>
+      </section>
+
+      <section id="student-homework" class="view-section hidden">
+        <div class="card"><h2>Homework Assignments</h2><p class="muted">Coming in Phase 3: Listening, Reading, Writing & Speaking tasks.</p></div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
