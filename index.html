@@ -4,7 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>IELTS Student Hub</title>
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#1d4ed8" />
   <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <!-- LOGIN SCREEN -->
@@ -96,15 +99,39 @@
                   <tr>
                     <th>ID</th>
                     <th>Full Name</th>
-                    <th>Anki Streak</th>
-                    <th>Today's Cards</th>
-                    <th>Total Cards</th>
+                    <th>Streak</th>
+                    <th>Today</th>
+                    <th>Analytics</th>
                   </tr>
                 </thead>
                 <tbody id="roster-table-body">
                   <tr><td colspan="5" class="muted center">Loading students...</td></tr>
                 </tbody>
               </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- TEACHER STUDENT INSPECTOR PANEL -->
+        <div id="teacher-inspector-card" class="card hidden" style="margin-top: 24px;">
+          <div class="card-header-flex">
+            <div>
+              <h2 id="inspector-student-title">Student Analytics</h2>
+              <p class="muted" style="margin-bottom:0;" id="inspector-student-sub">Score trajectory and permanent mistake profile</p>
+            </div>
+            <button id="close-inspector-btn" class="btn btn-outline btn-sm">Close Inspector ✕</button>
+          </div>
+
+          <div class="grid-2col" style="margin-top: 16px;">
+            <div>
+              <h3>Band Score Trajectory</h3>
+              <div style="position:relative;height:260px;width:100%;">
+                <canvas id="inspector-score-chart"></canvas>
+              </div>
+            </div>
+            <div>
+              <h3>Permanent Weakness Profile</h3>
+              <div id="inspector-mistakes-box"></div>
             </div>
           </div>
         </div>
@@ -142,20 +169,82 @@
         </div>
       </section>
 
-      <!-- 4. TEACHER MOCK SCORES PLACEHOLDER -->
+      <!-- 4. TEACHER ENTER MOCK SCORES -->
       <section id="teacher-mocks" class="view-section hidden">
-        <div class="card"><h2>Enter Mock Exam Scores</h2><p class="muted">Coming in Phase 4: Log L/R/W/S Mock Exam band scores into student analytics.</p></div>
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Log Mock Exam Score</h2>
+            <p class="muted">Enter a student's official Mock Exam band scores so they appear on their progress graph.</p>
+            <form id="mock-score-form">
+              <div class="form-group">
+                <label for="mock-student-select">Select Student</label>
+                <select id="mock-student-select" required>
+                  <option value="">-- Choose Student --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="mock-title-input">Mock Exam Title</label>
+                <input type="text" id="mock-title-input" placeholder="e.g., Mock Exam #1 (Nov 15)" required />
+              </div>
+              <div class="form-group">
+                <label for="mock-date-input">Exam Date</label>
+                <input type="date" id="mock-date-input" required />
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                <div class="form-group">
+                  <label for="mock-l">Listening Band</label>
+                  <input type="number" id="mock-l" step="0.5" min="1" max="9" placeholder="6.0" required />
+                </div>
+                <div class="form-group">
+                  <label for="mock-r">Reading Band</label>
+                  <input type="number" id="mock-r" step="0.5" min="1" max="9" placeholder="6.5" required />
+                </div>
+                <div class="form-group">
+                  <label for="mock-w">Writing Band</label>
+                  <input type="number" id="mock-w" step="0.5" min="1" max="9" placeholder="5.5" required />
+                </div>
+                <div class="form-group">
+                  <label for="mock-s">Speaking Band</label>
+                  <input type="number" id="mock-s" step="0.5" min="1" max="9" placeholder="6.0" required />
+                </div>
+              </div>
+              <button type="submit" class="btn btn-primary btn-full" id="save-mock-btn">Save Mock Score</button>
+              <p id="mock-save-msg" class="status-msg"></p>
+            </form>
+          </div>
+
+          <div class="card">
+            <h2>Recent Mock Exam Records</h2>
+            <p class="muted">All logged mock results across your 5.5–6.5 group:</p>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Student</th>
+                    <th>Mock</th>
+                    <th>L / R / W / S</th>
+                    <th>Overall</th>
+                  </tr>
+                </thead>
+                <tbody id="recent-mocks-tbody">
+                  <tr><td colspan="5" class="muted center">Loading mock scores...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ==================== STUDENT VIEWS ==================== -->
-      <!-- 1. STUDENT DASHBOARD -->
+      <!-- 1. STUDENT DASHBOARD & ANALYTICS -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
           <h2>Welcome back, <span id="welcome-student-name">Student</span>!</h2>
-          <p class="muted" style="margin-bottom:0;">Keep your daily vocabulary streak alive and complete your IELTS homework before the due date.</p>
+          <p class="muted" style="margin-bottom:0;">Track your IELTS band progression, daily vocabulary streak, and weak question types below.</p>
         </div>
 
-        <div class="stats-grid">
+        <div class="stats-grid" style="margin-bottom: 24px;">
           <div class="stat-box">
             <span class="stat-label">Cards Due Today</span>
             <span class="stat-value" id="dash-due-count">0</span>
@@ -172,9 +261,54 @@
             <button class="btn btn-outline btn-sm" id="dash-go-hw-btn" style="margin-top:10px;">View Assignments</button>
           </div>
           <div class="stat-box">
-            <span class="stat-label">Mastered / Seen</span>
-            <span class="stat-value" id="dash-mastered-count">0 / 0</span>
-            <span class="stat-sub">Total vocabulary cards</span>
+            <span class="stat-label">Latest Overall Band</span>
+            <span class="stat-value" id="dash-latest-band" style="color:var(--primary);">—</span>
+            <span class="stat-sub" id="dash-latest-mock-label">No mock logged yet</span>
+          </div>
+        </div>
+
+        <!-- SCORE TRAJECTORY CHART & PERMANENT WEAKNESSES -->
+        <div class="grid-2col" style="margin-bottom: 24px;">
+          <div class="card">
+            <div class="card-header-flex" style="margin-bottom:8px;">
+              <div>
+                <h3>IELTS Score Trajectory</h3>
+                <p class="muted" style="margin-bottom:0;">Tracks rises and drops across Homework & Mock Exams</p>
+              </div>
+            </div>
+            <div style="position:relative;height:280px;width:100%;margin-top:12px;">
+              <canvas id="student-score-chart"></canvas>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>Permanent Mistake Breakdown</h3>
+            <p class="muted">Cumulative errors logged across all Reading & Listening tests:</p>
+            <div id="dash-permanent-mistakes"></div>
+          </div>
+        </div>
+
+        <!-- MOCK EXAM HISTORY TABLE -->
+        <div class="card">
+          <h3>Mock Exam History</h3>
+          <p class="muted">Official Mock Exam scores entered by your teacher:</p>
+          <div class="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Mock Exam</th>
+                  <th>Listening</th>
+                  <th>Reading</th>
+                  <th>Writing</th>
+                  <th>Speaking</th>
+                  <th>Overall</th>
+                </tr>
+              </thead>
+              <tbody id="student-mocks-tbody">
+                <tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </section>
