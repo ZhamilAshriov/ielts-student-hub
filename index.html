@@ -55,6 +55,7 @@
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-stats">Statistics & Progress</button>
       <button class="nav-tab" data-target="student-resources">Practice Resources</button>
+      <button class="nav-tab" data-target="student-punishments">Punishments & Extras <span id="nav-punishment-badge" class="pill-badge">0</span></button>
     </nav>
 
     <!-- TEACHER NAVIGATION -->
@@ -64,6 +65,7 @@
       <button class="nav-tab" data-target="teacher-grading">Grading Queue <span id="nav-grade-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
       <button class="nav-tab" data-target="teacher-announcements">Announcements</button>
+      <button class="nav-tab" data-target="teacher-punishments">Assign Punishments</button>
     </nav>
 
     <!-- MAIN CONTENT AREA -->
@@ -579,6 +581,93 @@
           </div>
 
           <div id="resources-grid-container" class="hw-grid" style="margin-top:16px;"></div>
+        </div>
+      </section>
+      <!-- STUDENT PUNISHMENTS & EXTRA PRACTICE -->
+      <section id="student-punishments" class="view-section hidden">
+        <div class="card" style="margin-bottom:20px;">
+          <h2>Punishments & Makeup Assignments</h2>
+          <p class="muted" style="margin-bottom:0;">Extra practice assigned by your teacher for late submissions or missed deadlines. Complete these promptly to clear your record.</p>
+        </div>
+        <div id="student-punishments-container" class="hw-grid">
+          <p class="muted center">Loading punishments...</p>
+        </div>
+
+        <!-- PUNISHMENT SUBMISSION RUNNER -->
+        <div id="punishment-runner-view" class="hidden" style="margin-top:20px;">
+          <div class="runner-topbar">
+            <button id="back-to-punishments-btn" class="btn btn-outline btn-sm">← Back to Punishments</button>
+            <h3 id="punishment-runner-title">Complete Punishment</h3>
+            <span id="punishment-runner-due" class="role-pill">Due</span>
+          </div>
+          <div class="grid-2col" style="margin-top:16px;">
+            <div class="card" id="pun-runner-left"></div>
+            <div class="card" id="pun-runner-right"></div>
+          </div>
+        </div>
+      </section>
+      <!-- TEACHER ASSIGN PUNISHMENTS -->
+      <section id="teacher-punishments" class="view-section hidden">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Assign Punishment / Extra Practice</h2>
+            <p class="muted">Assign targeted makeup drills to students for late submissions or missed deadlines.</p>
+            <form id="assign-punishment-form">
+              <div class="form-group">
+                <label for="pun-student-select">Select Student</label>
+                <select id="pun-student-select" required>
+                  <option value="">-- Choose Student --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="pun-skill-select">Skill Category</label>
+                <select id="pun-skill-select" required>
+                  <option value="listening">Listening</option>
+                  <option value="reading">Reading</option>
+                  <option value="speaking">Speaking</option>
+                  <option value="writing">Writing</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="pun-reason">Reason / Title</label>
+                <input type="text" id="pun-reason" placeholder="e.g., Late Homework Penalty (Week 1)" required />
+              </div>
+
+              <!-- DYNAMIC CONFIGURATION CONTAINER -->
+              <div id="pun-config-container"></div>
+
+              <div class="form-group">
+                <label for="pun-duedate">Due Date & Time</label>
+                <input type="datetime-local" id="pun-duedate" required />
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full" id="assign-pun-btn">Assign Punishment</button>
+              <p id="pun-assign-msg" class="status-msg"></p>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Group Punishment Tracker</h2>
+              <button id="refresh-punishments-btn" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Skill & Reason</th>
+                    <th>Details</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="group-punishments-tbody">
+                  <tr><td colspan="5" class="muted center">Loading punishments...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </section>
     </main>
