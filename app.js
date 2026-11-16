@@ -49,7 +49,6 @@ const secondaryAuth = getAuth(secondaryApp);
 const DOMAIN = "@zhamil-hub.local";
 const TEACHER_EMAIL = "teacher" + DOMAIN;
 
-// Student Session State
 let currentStudentId = null;
 let currentStudentProfile = null;
 let ankiProgressMap = {};
@@ -64,43 +63,14 @@ let allGroupUsers = [];
 let allGroupMocks = [];
 let cachedAnnouncements = [];
 
-// Chart Instances
 let studentChartInstance = null;
 let groupCompareChartInstance = null;
 let inspectorChartInstance = null;
 
-// Cached Teacher Data
 let cachedStudents = [];
 let cachedSubmissions = [];
 let cachedMocks = [];
 let cachedTeacherPunishments = [];
-
-// Audio Recorder State
-let mediaRecorder = null;
-let recordedChunks = [];
-let recordedAudioBlob = null;
-let recInterval = null;
-let recSeconds = 0;
-
-function rawToIeltsBand(raw, total = 40) {
-  const scaled = Math.round((raw / total) * 40);
-  if (scaled >= 39) return 9.0;
-  if (scaled >= 37) return 8.5;
-  if (scaled >= 35) return 8.0;
-  if (scaled >= 33) return 7.5;
-  if (scaled >= 30) return 7.0;
-  if (scaled >= 27) return 6.5;
-  if (scaled >= 23) return 6.0;
-  if (scaled >= 19) return 5.5;
-  if (scaled >= 15) return 5.0;
-  if (scaled >= 13) return 4.5;
-  return 4.0;
-}
-
-function calcOverallIelts(l, r, w, s) {
-  const avg = (Number(l) + Number(r) + Number(w) + Number(s)) / 4;
-  return Math.round(avg * 2) / 2;
-}
 
 function getTodayStr(offsetDays = 0) {
   const d = new Date();
@@ -247,13 +217,13 @@ function switchView(targetId) {
   if (target) target.classList.remove("hidden");
 }
 
-document.getElementById("dash-start-anki-btn").addEventListener("click", () => {
+document.getElementById("dash-start-anki-btn")?.addEventListener("click", () => {
   document.querySelector('[data-target="student-anki"]').click();
 });
-document.getElementById("dash-go-hw-btn").addEventListener("click", () => {
+document.getElementById("dash-go-hw-btn")?.addEventListener("click", () => {
   document.querySelector('[data-target="student-homework"]').click();
 });
-document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
+document.getElementById("dash-go-stats-btn")?.addEventListener("click", () => {
   document.querySelector('[data-target="student-stats"]').click();
 });
 
