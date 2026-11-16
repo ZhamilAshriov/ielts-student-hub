@@ -11,6 +11,7 @@
   <meta name="theme-color" content="#1d4ed8" />
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 </head>
 <body>
   <!-- LOGIN SCREEN -->
@@ -55,6 +56,7 @@
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-stats">Statistics & Progress</button>
       <button class="nav-tab" data-target="student-resources">Practice Resources</button>
+      <button class="nav-tab" data-target="student-attendance">Attendance</button>
       <button class="nav-tab" data-target="student-punishments">Punishments & Extras <span id="nav-punishment-badge" class="pill-badge">0</span></button>
     </nav>
 
@@ -66,6 +68,7 @@
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
       <button class="nav-tab" data-target="teacher-announcements">Announcements</button>
       <button class="nav-tab" data-target="teacher-punishments">Assign Punishments</button>
+      <button class="nav-tab" data-target="teacher-attendance">Attendance Tracker</button>
     </nav>
 
     <!-- MAIN CONTENT AREA -->
@@ -242,6 +245,7 @@
           </div>
         </div>
       </section>
+
       <!-- 5. TEACHER ANNOUNCEMENTS -->
       <section id="teacher-announcements" class="view-section hidden">
         <div class="grid-2col">
@@ -287,6 +291,108 @@
         </div>
       </section>
 
+      <!-- 6. TEACHER ASSIGN PUNISHMENTS -->
+      <section id="teacher-punishments" class="view-section hidden">
+        <div class="grid-2col">
+          <div class="card">
+            <h2>Assign Punishment / Extra Practice</h2>
+            <p class="muted">Assign targeted makeup drills to students for late submissions or missed deadlines.</p>
+            <form id="assign-punishment-form">
+              <div class="form-group">
+                <label for="pun-student-select">Select Student</label>
+                <select id="pun-student-select" required>
+                  <option value="">-- Choose Student --</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="pun-skill-select">Skill Category</label>
+                <select id="pun-skill-select" required>
+                  <option value="listening">Listening</option>
+                  <option value="reading">Reading</option>
+                  <option value="speaking">Speaking</option>
+                  <option value="writing">Writing</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label for="pun-reason">Reason / Title</label>
+                <input type="text" id="pun-reason" placeholder="e.g., Late Homework Penalty (Week 1)" required />
+              </div>
+
+              <div id="pun-config-container"></div>
+
+              <div class="form-group">
+                <label for="pun-duedate">Due Date & Time</label>
+                <input type="datetime-local" id="pun-duedate" required />
+              </div>
+
+              <button type="submit" class="btn btn-primary btn-full" id="assign-pun-btn">Assign Punishment</button>
+              <p id="pun-assign-msg" class="status-msg"></p>
+            </form>
+          </div>
+
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Group Punishment Tracker</h2>
+              <button id="refresh-punishments-btn" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+            <div class="table-wrapper">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Skill & Reason</th>
+                    <th>Details</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="group-punishments-tbody">
+                  <tr><td colspan="5" class="muted center">Loading punishments...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. TEACHER ATTENDANCE TRACKER -->
+      <section id="teacher-attendance" class="view-section hidden">
+        <div class="grid-2col">
+          <div class="card center">
+            <h2>Today's Attendance QR Code</h2>
+            <p class="muted">Project this QR code on the screen at the start of the lesson.</p>
+            <div style="margin: 20px 0; display: flex; justify-content: center;">
+              <canvas id="teacher-qr-canvas" style="border: 4px solid var(--border); border-radius: 12px; padding: 10px; background: #fff;"></canvas>
+            </div>
+            <p id="qr-date-label" style="font-weight: 600; color: var(--primary);"></p>
+            <button id="refresh-qr-btn" class="btn btn-outline btn-sm" style="margin-top: 10px;">Refresh QR Code</button>
+          </div>
+
+          <div class="card">
+            <div class="card-header-flex">
+              <h2>Live Attendance Report</h2>
+              <button id="refresh-attendance-table-btn" class="btn btn-outline btn-sm">Refresh</button>
+            </div>
+            <div class="table-wrapper" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Student ID</th>
+                    <th>Full Name</th>
+                    <th>Status</th>
+                    <th>Time Checked In</th>
+                  </tr>
+                </thead>
+                <tbody id="teacher-attendance-tbody">
+                  <tr><td colspan="4" class="muted center">Loading attendance records...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ==================== STUDENT VIEWS ==================== -->
       <!-- 1. STUDENT HOME (Action-Focused Daily Hub) -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
@@ -583,7 +689,23 @@
           <div id="resources-grid-container" class="hw-grid" style="margin-top:16px;"></div>
         </div>
       </section>
-      <!-- STUDENT PUNISHMENTS & EXTRA PRACTICE -->
+
+      <!-- 6. STUDENT ATTENDANCE SECTION -->
+      <section id="student-attendance" class="view-section hidden">
+        <div class="card center" style="padding: 40px 24px;">
+          <div style="font-size: 48px; margin-bottom: 12px;">📸</div>
+          <h2>Lesson Attendance Check-In</h2>
+          <p class="muted" style="max-width: 480px; margin: 0 auto 20px auto;">
+            Scan the QR code displayed on the classroom screen by your teacher, or click the button below if you are checking in live.
+          </p>
+          <div id="checkin-status-box" style="margin-bottom: 20px; font-weight: 600; font-size: 16px;">
+            <span class="muted">Ready to check in for today's lesson.</span>
+          </div>
+          <button id="manual-checkin-btn" class="btn btn-primary btn-lg">Check In For Today's Class</button>
+        </div>
+      </section>
+
+      <!-- 7. STUDENT PUNISHMENTS & EXTRAS -->
       <section id="student-punishments" class="view-section hidden">
         <div class="card" style="margin-bottom:20px;">
           <h2>Punishments & Makeup Assignments</h2>
@@ -603,70 +725,6 @@
           <div class="grid-2col" style="margin-top:16px;">
             <div class="card" id="pun-runner-left"></div>
             <div class="card" id="pun-runner-right"></div>
-          </div>
-        </div>
-      </section>
-      <!-- TEACHER ASSIGN PUNISHMENTS -->
-      <section id="teacher-punishments" class="view-section hidden">
-        <div class="grid-2col">
-          <div class="card">
-            <h2>Assign Punishment / Extra Practice</h2>
-            <p class="muted">Assign targeted makeup drills to students for late submissions or missed deadlines.</p>
-            <form id="assign-punishment-form">
-              <div class="form-group">
-                <label for="pun-student-select">Select Student</label>
-                <select id="pun-student-select" required>
-                  <option value="">-- Choose Student --</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="pun-skill-select">Skill Category</label>
-                <select id="pun-skill-select" required>
-                  <option value="listening">Listening</option>
-                  <option value="reading">Reading</option>
-                  <option value="speaking">Speaking</option>
-                  <option value="writing">Writing</option>
-                </select>
-              </div>
-              <div class="form-group">
-                <label for="pun-reason">Reason / Title</label>
-                <input type="text" id="pun-reason" placeholder="e.g., Late Homework Penalty (Week 1)" required />
-              </div>
-
-              <!-- DYNAMIC CONFIGURATION CONTAINER -->
-              <div id="pun-config-container"></div>
-
-              <div class="form-group">
-                <label for="pun-duedate">Due Date & Time</label>
-                <input type="datetime-local" id="pun-duedate" required />
-              </div>
-
-              <button type="submit" class="btn btn-primary btn-full" id="assign-pun-btn">Assign Punishment</button>
-              <p id="pun-assign-msg" class="status-msg"></p>
-            </form>
-          </div>
-
-          <div class="card">
-            <div class="card-header-flex">
-              <h2>Group Punishment Tracker</h2>
-              <button id="refresh-punishments-btn" class="btn btn-outline btn-sm">Refresh</button>
-            </div>
-            <div class="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Student</th>
-                    <th>Skill & Reason</th>
-                    <th>Details</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="group-punishments-tbody">
-                  <tr><td colspan="5" class="muted center">Loading punishments...</td></tr>
-                </tbody>
-              </table>
-            </div>
           </div>
         </div>
       </section>
