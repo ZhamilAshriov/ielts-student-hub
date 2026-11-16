@@ -73,7 +73,7 @@ let inspectorChartInstance = null;
 let cachedStudents = [];
 let cachedSubmissions = [];
 let cachedMocks = [];
-let cachedTeacherPunishments = [];
+let cachedTeacherTasks = [];
 
 // Audio Recorder State
 let mediaRecorder = null;
@@ -207,7 +207,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("teacher-nav").classList.remove("hidden");
     document.getElementById("student-nav").classList.add("hidden");
     document.getElementById("mock-date-input").value = getTodayStr();
-    document.getElementById("pun-duedate").value = getTodayStr() + "T23:59";
+    document.getElementById("task-duedate").value = getTodayStr() + "T23:59";
     switchView("teacher-roster");
     loadTeacherData();
   } else {
@@ -230,10 +230,10 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
 
     if (tab.dataset.target === "student-homework") {
       showHomeworkListView();
+    } else if (tab.dataset.target === "student-tasks") {
+      renderStudentTasksList();
     } else if (tab.dataset.target === "student-stats") {
       renderStatisticsPage();
-    } else if (tab.dataset.target === "student-punishments") {
-      renderStudentPunishmentsList();
     } else if (tab.dataset.target === "teacher-attendance") {
       renderTeacherAttendanceManager();
     }
@@ -257,10 +257,10 @@ document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// TEACHER: ROSTER, MATRIX, GRADING, MOCKS, ANNOUNCEMENTS, PUNISHMENTS & ATTENDANCE
+// TEACHER: ROSTER, MATRIX, GRADING, MOCKS, ANNOUNCEMENTS, TASKS & ATTENDANCE
 // ==========================================
 async function loadTeacherData() {
-  const [usersSnap, subsSnap, mocksSnap, annSnap, punSnap] = await Promise.all([
+  const [usersSnap, subsSnap, mocksSnap, annSnap, taskSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(collection(db, "submissions")),
     getDocs(collection(db, "mockScores")),
@@ -285,18 +285,18 @@ async function loadTeacherData() {
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
   cachedAnnouncements = sortAnnouncementsList(rawAnns);
 
-  cachedTeacherPunishments = [];
-  punSnap.forEach((d) => cachedTeacherPunishments.push(d.data()));
-  cachedTeacherPunishments.sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+  cachedTeacherTasks = [];
+  taskSnap.forEach((d) => cachedTeacherTasks.push(d.data()));
+  cachedTeacherTasks.sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
 
   renderTeacherRoster(cachedStudents);
   renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
   populateMockStudentDropdown(cachedStudents);
-  populatePunishmentStudentDropdown(cachedStudents);
+  populateTaskStudentDropdown(cachedStudents);
   renderRecentMocksTable(cachedStudents, cachedMocks);
   renderTeacherAnnouncementsList(cachedAnnouncements);
-  renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+  renderTeacherTasks(cachedTeacherTasks, cachedStudents);
   renderTeacherAttendanceManager();
 }
 
@@ -474,12 +474,14 @@ function populateMockStudentDropdown(students) {
   if (currentVal) sel.value = currentVal;
 }
 
-function populatePunishmentStudentDropdown(students) {
-  const sel = document.getElementById("pun-student-select");
+function populateTaskStudentDropdown(students) {
+  const sel = document.getElementById("task-student-select");
   if (!sel) return;
   const currentVal = sel.value;
-  sel.innerHTML = `<option value="">-- Choose Student --</option>` +
-    students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
+  sel.innerHTML = `
+    <option value="">-- Choose Target --</option>
+    <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
+  ` + students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
   if (currentVal) sel.value = currentVal;
 }
 
@@ -722,8 +724,8 @@ window.saveTeacherGrade = async function (docId, noBandRequired = false) {
 document.getElementById("refresh-roster-btn").addEventListener("click", loadTeacherData);
 document.getElementById("refresh-matrix-btn").addEventListener("click", loadTeacherData);
 document.getElementById("refresh-grading-btn").addEventListener("click", loadTeacherData);
-const refreshPunishmentsBtn = document.getElementById("refresh-punishments-btn");
-if (refreshPunishmentsBtn) refreshPunishmentsBtn.addEventListener("click", loadTeacherData);
+const refreshTasksBtn = document.getElementById("refresh-tasks-btn");
+if (refreshTasksBtn) refreshTasksBtn.addEventListener("click", loadTeacherData);
 
 // ==========================================
 // ATTENDANCE & QR CODE SYSTEM (TEACHER & STUDENT)
@@ -738,16 +740,8 @@ async function renderTeacherAttendanceManager() {
 
   const checkinUrl = `${window.location.origin}${window.location.pathname}?checkin=${today}`;
 
-  // Defensive check: prevents app crash if CDN script fails to load
   if (typeof QRCode === "undefined") {
-    console.error("QRCode library is not loaded. Please check your script tag in index.html.");
-    const ctx = canvas.getContext("2d");
-    if (ctx) {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.font = "12px sans-serif";
-      ctx.fillStyle = "#dc2626";
-      ctx.fillText("QR Library Not Loaded", 15, 100);
-    }
+    console.error("QRCode library is not loaded.");
     return;
   }
 
@@ -794,92 +788,131 @@ const refreshQrBtn = document.getElementById("refresh-qr-btn");
 if (refreshAttBtn) refreshAttBtn.addEventListener("click", renderTeacherAttendanceManager);
 if (refreshQrBtn) refreshQrBtn.addEventListener("click", renderTeacherAttendanceManager);
 
-// ==========================================
-// QUICK ASSIGNMENT & DISPATCHER (TEACHER)
-// ==========================================
-function populatePunishmentStudentDropdown(students) {
-  const sel = document.getElementById("pun-student-select");
-  if (!sel) return;
-  const currentVal = sel.value;
-  sel.innerHTML = `
-    <option value="">-- Choose Target --</option>
-    <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
-  ` + students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
-  if (currentVal) sel.value = currentVal;
+async function handleUrlCheckInToken() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const checkinDate = urlParams.get("checkin");
+  if (!checkinDate || !currentStudentId) return;
+
+  const todayStr = getTodayStr();
+
+  if (checkinDate !== todayStr) {
+    alert("Error: This QR code is expired or invalid for today's date!");
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const isClassDay = (dayOfWeek === 2 || dayOfWeek === 4 || dayOfWeek === 6);
+
+  if (!isClassDay) {
+    alert("Error: Today is not a scheduled class day (Tue, Thu, Sat)!");
+    window.history.replaceState({}, document.title, window.location.pathname);
+    return;
+  }
+
+  try {
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+
+    let scheduledStartMinutes = (dayOfWeek === 6) ? (10 * 60 + 30) : (16 * 60);
+    const gracePeriodMinutes = 15;
+    const status = totalMinutes <= (scheduledStartMinutes + gracePeriodMinutes) ? "Present" : "Late";
+
+    const docId = `${todayStr}_${currentStudentId}`;
+    await setDoc(doc(db, "attendance", docId), {
+      studentId: currentStudentId,
+      date: todayStr,
+      status,
+      checkedInAt: serverTimestamp()
+    }, { merge: true });
+
+    document.getElementById("checkin-status-box").innerHTML = `
+      <span style="color: var(--success); font-size: 18px;">✅ Attendance Logged as "${status}"!</span>
+      <div class="muted" style="font-size: 13px; margin-top: 4px;">Date: ${todayStr}</div>
+    `;
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch (err) {
+    console.error("Check-in error:", err);
+  }
 }
 
-const punSkillSelect = document.getElementById("pun-skill-select");
-if (punSkillSelect) {
-  punSkillSelect.addEventListener("change", renderPunishmentConfigInputs);
-  renderPunishmentConfigInputs();
+// ==========================================
+// ASSIGNED TASKS DISPATCHER (TEACHER)
+// ==========================================
+const taskSkillSelect = document.getElementById("task-skill-select");
+if (taskSkillSelect) {
+  taskSkillSelect.addEventListener("change", renderTaskConfigInputs);
+  renderTaskConfigInputs();
 }
 
-function renderPunishmentConfigInputs() {
-  const skill = document.getElementById("pun-skill-select").value;
-  const container = document.getElementById("pun-config-container");
+function renderTaskConfigInputs() {
+  const skill = document.getElementById("task-skill-select").value;
+  const container = document.getElementById("task-config-container");
   if (!container) return;
 
   if (skill === "listening" || skill === "reading") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-count">How many test sets? (e.g. 2)</label>
-        <input type="number" id="pun-count" min="1" max="10" value="1" required />
+        <label for="task-count">How many test sets? (e.g. 2)</label>
+        <input type="number" id="task-count" min="1" max="10" value="1" required />
       </div>
     `;
   } else if (skill === "speaking") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-spk-notes">Speaking Instructions / Prompt / Notes</label>
-        <textarea id="pun-spk-notes" rows="3" placeholder="e.g. Complete Speaking Part 2 on Describe a memorable journey. Talk for 2 full minutes." required></textarea>
+        <label for="task-spk-notes">Speaking Instructions / Prompt / Notes</label>
+        <textarea id="task-spk-notes" rows="3" placeholder="e.g. Complete Speaking Part 2 on Describe a memorable journey. Talk for 2 full minutes." required></textarea>
       </div>
     `;
   } else if (skill === "other") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-custom-title">Assignment Title / Instructions</label>
-        <input type="text" id="pun-custom-title" placeholder="e.g. Vocabulary Workbook Unit 3 Exercises" required />
+        <label for="task-custom-title">Assignment Title / Instructions</label>
+        <input type="text" id="task-custom-title" placeholder="e.g. Vocabulary Workbook Unit 3 Exercises" required />
       </div>
     `;
   }
 }
 
-const assignPunishmentForm = document.getElementById("assign-punishment-form");
-if (assignPunishmentForm) {
-  assignPunishmentForm.addEventListener("submit", async (e) => {
+const assignTaskForm = document.getElementById("assign-task-form");
+if (assignTaskForm) {
+  assignTaskForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const msgEl = document.getElementById("pun-assign-msg");
-    const btn = document.getElementById("assign-pun-btn");
+    const msgEl = document.getElementById("task-assign-msg");
+    const btn = document.getElementById("assign-task-btn");
 
-    const target = document.getElementById("pun-student-select").value;
-    const skill = document.getElementById("pun-skill-select").value;
-    const dueDate = document.getElementById("pun-duedate").value;
+    const target = document.getElementById("task-student-select").value;
+    const skill = document.getElementById("task-skill-select").value;
+    const dueDate = document.getElementById("task-duedate").value;
 
     let reason = "";
     let details = {};
 
     if (skill === "listening" || skill === "reading") {
-      const count = document.getElementById("pun-count").value;
+      const count = document.getElementById("task-count").value;
       reason = `${count}x ${skill.toUpperCase()} Test Set(s)`;
       details = { testCount: Number(count) };
     } else if (skill === "speaking") {
-      reason = document.getElementById("pun-spk-notes").value.trim();
+      reason = document.getElementById("task-spk-notes").value.trim();
       details = { notes: reason };
     } else if (skill === "other") {
-      reason = document.getElementById("pun-custom-title").value.trim();
+      reason = document.getElementById("task-custom-title").value.trim();
       details = { custom: true };
     }
 
     btn.disabled = true;
-    btn.textContent = "Dispatching...";
+    btn.textContent = "Assigning...";
     msgEl.textContent = "";
 
     try {
       const targets = target === "ALL" ? cachedStudents.map((s) => s.studentId) : [target];
 
       for (const studentId of targets) {
-        const punId = `PUN_${studentId}_${Date.now()}`;
-        await setDoc(doc(db, "punishments", punId), {
-          id: punId,
+        const taskId = `TASK_${studentId}_${Date.now()}`;
+        await setDoc(doc(db, "punishments", taskId), {
+          id: taskId,
           studentId,
           skill,
           reason,
@@ -891,20 +924,61 @@ if (assignPunishmentForm) {
       }
 
       msgEl.style.color = "var(--success)";
-      msgEl.textContent = target === "ALL" ? "Successfully broadcasted to all students!" : `Successfully assigned to ${target}!`;
-      assignPunishmentForm.reset();
-      document.getElementById("pun-duedate").value = getTodayStr() + "T23:59";
-      renderPunishmentConfigInputs();
+      msgEl.textContent = target === "ALL" ? "Successfully broadcasted task to all students!" : `Successfully assigned to ${target}!`;
+      assignTaskForm.reset();
+      document.getElementById("task-duedate").value = getTodayStr() + "T23:59";
+      renderTaskConfigInputs();
       loadTeacherData();
     } catch (err) {
       msgEl.style.color = "var(--danger)";
-      msgEl.textContent = "Error dispatching assignment: " + err.message;
+      msgEl.textContent = "Error assigning task: " + err.message;
     } finally {
       btn.disabled = false;
-      btn.textContent = "Dispatch Assignment 🚀";
+      btn.textContent = "Assign Task 🚀";
     }
   });
 }
+
+function renderTeacherTasks(tasks, students) {
+  const tbody = document.getElementById("group-tasks-tbody");
+  if (!tbody) return;
+
+  if (tasks.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted center">No active tasks assigned.</td></tr>`;
+    return;
+  }
+
+  const nameMap = {};
+  students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
+
+  tbody.innerHTML = tasks.map((t) => {
+    const sName = nameMap[t.studentId] || t.studentId;
+    let detailStr = "";
+    if (t.skill === "listening" || t.skill === "reading") detailStr = `${t.details.testCount} test set(s)`;
+    else if (t.skill === "speaking") detailStr = t.details.notes || "Speaking practice";
+    else if (t.skill === "other") detailStr = "Custom task";
+
+    const statusBadge = t.status === "verified" ? `<span class="badge badge-green">Verified</span>`
+      : t.status === "submitted" ? `<span class="badge badge-blue">Submitted</span>`
+      : `<span class="badge badge-red">Pending</span>`;
+
+    return `
+      <tr>
+        <td><strong>${t.studentId}</strong><br><span class="muted" style="font-size:12px;">${sName}</span></td>
+        <td><span class="role-pill">${t.skill.toUpperCase()}</span><br>${escapeHtml(t.reason)}</td>
+        <td>${escapeHtml(detailStr)}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(t.dueDate)}</span></td>
+        <td>${statusBadge}</td>
+        <td><button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteTask('${t.id}')">Delete</button></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+window.deleteTask = async function (taskId) {
+  if (!confirm("Remove this assigned task?")) return;
+  await deleteDoc(doc(db, "punishments", taskId));
+  loadTeacherData();
+};
 
 // ==========================================
 // SHARED ANALYTICS RENDERERS (CHARTS & MISTAKES)
@@ -1157,7 +1231,7 @@ async function initStudentData() {
   renderStudentAnnouncements(cachedAnnouncements);
   renderAssignmentsList();
   renderResourcesList("all");
-  renderStudentPunishmentsList();
+  renderStudentTasksList();
 }
 
 function renderStudentAnnouncements(list) {
@@ -2261,47 +2335,47 @@ async function submitGrammarHomework(hw) {
 }
 
 // ==========================================
-// STUDENT PUNISHMENTS & EXTRAS WORKFLOW
+// STUDENT ASSIGNED TASKS WORKFLOW
 // ==========================================
-async function renderStudentPunishmentsList() {
-  const container = document.getElementById("student-punishments-container");
+async function renderStudentTasksList() {
+  const container = document.getElementById("student-tasks-container");
   if (!container) return;
 
   const q = query(collection(db, "punishments"), where("studentId", "==", currentStudentId));
   const snap = await getDocs(q);
-  const myPunishments = [];
-  snap.forEach((d) => myPunishments.push(d.data()));
+  const myTasks = [];
+  snap.forEach((d) => myTasks.push(d.data()));
 
-  const pendingCount = myPunishments.filter((p) => p.status !== "verified").length;
-  const badgeEl = document.getElementById("nav-punishment-badge");
+  const pendingCount = myTasks.filter((t) => t.status !== "verified").length;
+  const badgeEl = document.getElementById("nav-task-badge");
   if (badgeEl) badgeEl.textContent = pendingCount;
 
-  if (myPunishments.length === 0) {
-    container.innerHTML = `<p class="muted center" style="padding:32px 0;">🎉 You have no active punishments or extra practice assignments!</p>`;
+  if (myTasks.length === 0) {
+    container.innerHTML = `<p class="muted center" style="padding:32px 0;">🎉 You have no active assigned tasks!</p>`;
     return;
   }
 
-  container.innerHTML = myPunishments.map((p) => {
+  container.innerHTML = myTasks.map((t) => {
     let detailStr = "";
-    if (p.skill === "listening" || p.skill === "reading") detailStr = `${p.details.testCount} test set(s)`;
-    else if (p.skill === "speaking") detailStr = `${p.details.part} — ${p.details.quantity}`;
-    else if (p.skill === "writing") detailStr = p.details.taskType;
+    if (t.skill === "listening" || t.skill === "reading") detailStr = `${t.details.testCount} test set(s)`;
+    else if (t.skill === "speaking") detailStr = t.details.notes || "Speaking practice";
+    else if (t.skill === "other") detailStr = "Custom task";
 
-    const statusBadge = p.status === "verified" ? `<span class="badge badge-green">Completed & Verified</span>`
-      : p.status === "submitted" ? `<span class="badge badge-blue">Submitted (Pending Review)</span>`
-      : `<span class="badge badge-red">Pending Due ${formatDueDate(p.dueDate)}</span>`;
+    const statusBadge = t.status === "verified" ? `<span class="badge badge-green">Completed & Verified</span>`
+      : t.status === "submitted" ? `<span class="badge badge-blue">Submitted (Pending Review)</span>`
+      : `<span class="badge badge-red">Pending Due ${formatDueDate(t.dueDate)}</span>`;
 
-    const actionBtn = p.status === "verified"
-      ? `<span class="muted" style="font-size:13px;">Cleared</span>`
-      : `<button class="btn btn-primary btn-sm" onclick="window.startPunishmentRunner('${p.id}')">Complete & Submit</button>`;
+    const actionBtn = t.status === "verified"
+      ? `<span class="muted" style="font-size:13px;">Completed</span>`
+      : `<button class="btn btn-primary btn-sm" onclick="window.startTaskRunner('${t.id}')">Complete & Submit</button>`;
 
     return `
       <div class="hw-item">
         <div style="flex:1;">
-          <span class="role-pill">${p.skill.toUpperCase()}</span>
-          <strong>${escapeHtml(p.reason)}</strong>
-          <div style="font-size:13px;color:var(--text);margin-top:4px;">Requirements: ${escapeHtml(detailStr)}</div>
-          <div class="hw-meta" style="margin-top:6px;"><span>Deadline: ${formatDueDate(p.dueDate)}</span>${statusBadge}</div>
+          <span class="role-pill">${t.skill.toUpperCase()}</span>
+          <strong>${escapeHtml(t.reason)}</strong>
+          <div style="font-size:13px;color:var(--text);margin-top:4px;">Instructions: ${escapeHtml(detailStr)}</div>
+          <div class="hw-meta" style="margin-top:6px;"><span>Deadline: ${formatDueDate(t.dueDate)}</span>${statusBadge}</div>
         </div>
         <div>${actionBtn}</div>
       </div>
@@ -2309,57 +2383,51 @@ async function renderStudentPunishmentsList() {
   }).join("");
 }
 
-let activePunishment = null;
+let activeTask = null;
 
-window.startPunishmentRunner = async function (punId) {
-  const snap = await getDoc(doc(db, "punishments", punId));
+window.startTaskRunner = async function (taskId) {
+  const snap = await getDoc(doc(db, "punishments", taskId));
   if (!snap.exists()) return;
-  activePunishment = snap.data();
+  activeTask = snap.data();
 
-  const containerCard = document.getElementById("student-punishments-container")?.parentElement?.querySelector(".card");
+  const containerCard = document.getElementById("student-tasks-container")?.parentElement?.querySelector(".card");
   if (containerCard) containerCard.classList.add("hidden");
-  const cont = document.getElementById("student-punishments-container");
+  const cont = document.getElementById("student-tasks-container");
   if (cont) cont.classList.add("hidden");
-  const runnerView = document.getElementById("punishment-runner-view");
+  const runnerView = document.getElementById("task-runner-view");
   if (runnerView) runnerView.classList.remove("hidden");
 
-  const titleEl = document.getElementById("punishment-runner-title");
-  if (titleEl) titleEl.textContent = activePunishment.reason;
-  const dueEl = document.getElementById("punishment-runner-due");
-  if (dueEl) dueEl.textContent = `Due: ${formatDueDate(activePunishment.dueDate)}`;
+  const titleEl = document.getElementById("task-runner-title");
+  if (titleEl) titleEl.textContent = activeTask.reason;
+  const dueEl = document.getElementById("task-runner-due");
+  if (dueEl) dueEl.textContent = `Due: ${formatDueDate(activeTask.dueDate)}`;
 
-  const leftPane = document.getElementById("pun-runner-left");
-  const rightPane = document.getElementById("pun-runner-right");
+  const leftPane = document.getElementById("task-runner-left");
+  const rightPane = document.getElementById("task-runner-right");
 
   if (leftPane) {
     leftPane.innerHTML = `
-      <h3>Punishment Instructions</h3>
-      <p class="passage-box">Complete your assigned ${activePunishment.skill.toUpperCase()} practice requirement and submit your proof below.</p>
-      <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;margin-top:12px;">
-        <strong>Requirements:</strong><br/>
-        ${activePunishment.skill === "listening" || activePunishment.skill === "reading" ? `Complete ${activePunishment.details.testCount} test set(s) and upload your score screenshot.` : ""}
-        ${activePunishment.skill === "speaking" ? `Record your answers for ${activePunishment.details.part} (${activePunishment.details.quantity}).` : ""}
-        ${activePunishment.skill === "writing" ? `Write your essay for: ${activePunishment.details.taskType} (min 150 words for Task 1, min 250 words for Task 2).` : ""}
-      </div>
+      <h3>Task Instructions</h3>
+      <p class="passage-box">Complete your assigned ${activeTask.skill.toUpperCase()} task and submit your work or screenshot below.</p>
     `;
   }
 
   if (rightPane) {
-    if (activePunishment.skill === "listening" || activePunishment.skill === "reading") {
+    if (activeTask.skill === "listening" || activeTask.skill === "reading") {
       rightPane.innerHTML = `
         <h3>Submit Score & Screenshot</h3>
         <div class="form-group">
-          <label for="pun-lr-score">Correct Answers / Score Summary</label>
-          <input type="text" id="pun-lr-score" placeholder="e.g., 34 / 40" required />
+          <label for="task-lr-score">Correct Answers / Score Summary</label>
+          <input type="text" id="task-lr-score" placeholder="e.g., 34 / 40" required />
         </div>
         <div class="form-group">
-          <label for="pun-lr-file">Result Screenshot (PNG / JPG)</label>
-          <input type="file" id="pun-lr-file" accept="image/*" required />
+          <label for="task-lr-file">Result Screenshot (PNG / JPG)</label>
+          <input type="file" id="task-lr-file" accept="image/*" required />
         </div>
-        <button class="btn btn-primary btn-full" id="submit-pun-lr-btn">Submit Punishment Proof</button>
+        <button class="btn btn-primary btn-full" id="submit-task-lr-btn">Submit Task Proof</button>
       `;
-      document.getElementById("submit-pun-lr-btn").addEventListener("click", submitPunishmentScreenshot);
-    } else if (activePunishment.skill === "speaking") {
+      document.getElementById("submit-task-lr-btn").addEventListener("click", submitTaskScreenshot);
+    } else if (activeTask.skill === "speaking") {
       rightPane.innerHTML = `
         <h3>Record Speaking Answer</h3>
         <div style="text-align:center;padding:24px 0;">
@@ -2373,37 +2441,37 @@ window.startPunishmentRunner = async function (punId) {
             <audio id="rec-audio-preview" controls style="width:100%;"></audio>
           </div>
         </div>
-        <button class="btn btn-primary btn-full" onclick="submitPunishmentAudio()">Upload & Submit Speaking</button>
+        <button class="btn btn-primary btn-full" onclick="submitTaskAudio()">Upload & Submit Speaking</button>
       `;
-    } else if (activePunishment.skill === "writing") {
+    } else {
       rightPane.innerHTML = `
-        <h3>Submit Essay Response</h3>
+        <h3>Submit Task Response</h3>
         <div class="form-group">
-          <label for="pun-writing-input">Type your essay / report here</label>
-          <textarea id="pun-writing-input" rows="10" placeholder="Type your response..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+          <label for="task-response-input">Type your answer or notes here</label>
+          <textarea id="task-response-input" rows="8" placeholder="Type response..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
         </div>
-        <button class="btn btn-primary btn-full" onclick="submitPunishmentWriting()">Submit Writing</button>
+        <button class="btn btn-primary btn-full" onclick="submitTaskCustom()">Submit Task</button>
       `;
     }
   }
 };
 
-const backPunBtn = document.getElementById("back-to-punishments-btn");
-if (backPunBtn) {
-  backPunBtn.addEventListener("click", () => {
-    document.getElementById("punishment-runner-view").classList.add("hidden");
-    const containerCard = document.getElementById("student-punishments-container")?.parentElement?.querySelector(".card");
+const backTaskBtn = document.getElementById("back-to-tasks-btn");
+if (backTaskBtn) {
+  backTaskBtn.addEventListener("click", () => {
+    document.getElementById("task-runner-view").classList.add("hidden");
+    const containerCard = document.getElementById("student-tasks-container")?.parentElement?.querySelector(".card");
     if (containerCard) containerCard.classList.remove("hidden");
-    const cont = document.getElementById("student-punishments-container");
+    const cont = document.getElementById("student-tasks-container");
     if (cont) cont.classList.remove("hidden");
-    renderStudentPunishmentsList();
+    renderStudentTasksList();
   });
 }
 
-async function submitPunishmentScreenshot() {
-  const fileInput = document.getElementById("pun-lr-file");
+async function submitTaskScreenshot() {
+  const fileInput = document.getElementById("task-lr-file");
   const file = fileInput.files[0];
-  const scoreText = document.getElementById("pun-lr-score").value.trim();
+  const scoreText = document.getElementById("task-lr-score").value.trim();
   if (!file || !scoreText) return alert("Please enter your score and attach a screenshot.");
 
   const formData = new FormData();
@@ -2414,49 +2482,49 @@ async function submitPunishmentScreenshot() {
   const data = await res.json();
   if (!data.secure_url) return alert("Upload failed.");
 
-  await updateDoc(doc(db, "punishments", activePunishment.id), {
+  await updateDoc(doc(db, "punishments", activeTask.id), {
     status: "submitted",
     submission: { scoreText, screenshotUrl: data.secure_url },
     submittedAt: serverTimestamp()
   });
 
-  alert("Punishment submitted successfully!");
-  document.getElementById("back-to-punishments-btn").click();
+  alert("Task submitted successfully!");
+  document.getElementById("back-to-tasks-btn").click();
 }
 
-async function submitPunishmentWriting() {
-  const text = document.getElementById("pun-writing-input").value.trim();
-  if (!text) return alert("Please write your essay.");
+async function submitTaskCustom() {
+  const text = document.getElementById("task-response-input").value.trim();
+  if (!text) return alert("Please enter your response.");
 
-  await updateDoc(doc(db, "punishments", activePunishment.id), {
+  await updateDoc(doc(db, "punishments", activeTask.id), {
     status: "submitted",
-    submission: { essayText: text, wordCount: text.split(/\s+/).length },
+    submission: { responseText: text },
     submittedAt: serverTimestamp()
   });
 
-  alert("Punishment submitted successfully!");
-  document.getElementById("back-to-punishments-btn").click();
+  alert("Task submitted successfully!");
+  document.getElementById("back-to-tasks-btn").click();
 }
 
-window.submitPunishmentAudio = async function () {
+window.submitTaskAudio = async function () {
   if (!recordedAudioBlob) return alert("Please record your audio first.");
 
   const formData = new FormData();
-  formData.append("file", recordedAudioBlob, `pun_${activePunishment.id}.webm`);
+  formData.append("file", recordedAudioBlob, `task_${activeTask.id}.webm`);
   formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
   const data = await res.json();
   if (!data.secure_url) return alert("Audio upload failed.");
 
-  await updateDoc(doc(db, "punishments", activePunishment.id), {
+  await updateDoc(doc(db, "punishments", activeTask.id), {
     status: "submitted",
     submission: { audioUrl: data.secure_url },
     submittedAt: serverTimestamp()
   });
 
-  alert("Speaking punishment submitted!");
-  document.getElementById("back-to-punishments-btn").click();
+  alert("Speaking task submitted!");
+  document.getElementById("back-to-tasks-btn").click();
 };
 
 // ==========================================
