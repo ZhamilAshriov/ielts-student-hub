@@ -63,6 +63,7 @@ let studentMocksList = [];
 let allGroupUsers = [];
 let allGroupMocks = [];
 let cachedAnnouncements = [];
+let cachedPunishments = [];
 
 // Chart Instances
 let studentChartInstance = null;
@@ -73,6 +74,7 @@ let inspectorChartInstance = null;
 let cachedStudents = [];
 let cachedSubmissions = [];
 let cachedMocks = [];
+let cachedTeacherPunishments = [];
 
 // Audio Recorder State
 let mediaRecorder = null;
@@ -206,6 +208,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("teacher-nav").classList.remove("hidden");
     document.getElementById("student-nav").classList.add("hidden");
     document.getElementById("mock-date-input").value = getTodayStr();
+    document.getElementById("pun-duedate").value = getTodayStr() + "T23:59";
     switchView("teacher-roster");
     loadTeacherData();
   } else {
@@ -229,6 +232,8 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
       showHomeworkListView();
     } else if (tab.dataset.target === "student-stats") {
       renderStatisticsPage();
+    } else if (tab.dataset.target === "student-punishments") {
+      renderStudentPunishmentsList();
     }
   });
 });
@@ -250,14 +255,15 @@ document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// TEACHER: ROSTER, MATRIX, GRADING, MOCKS & ANNOUNCEMENTS
+// TEACHER: ROSTER, MATRIX, GRADING, MOCKS, ANNOUNCEMENTS & PUNISHMENTS
 // ==========================================
 async function loadTeacherData() {
-  const [usersSnap, subsSnap, mocksSnap, annSnap] = await Promise.all([
+  const [usersSnap, subsSnap, mocksSnap, annSnap, punSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(collection(db, "submissions")),
     getDocs(collection(db, "mockScores")),
-    getDocs(collection(db, "announcements"))
+    getDocs(collection(db, "announcements")),
+    getDocs(collection(db, "punishments"))
   ]);
 
   cachedStudents = [];
@@ -277,12 +283,18 @@ async function loadTeacherData() {
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
   cachedAnnouncements = sortAnnouncementsList(rawAnns);
 
+  cachedTeacherPunishments = [];
+  punSnap.forEach((d) => cachedTeacherPunishments.push(d.data()));
+  cachedTeacherPunishments.sort((a, b) => (b.dueDate || "").localeCompare(a.dueDate || ""));
+
   renderTeacherRoster(cachedStudents);
   renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
   populateMockStudentDropdown(cachedStudents);
+  populatePunishmentStudentDropdown(cachedStudents);
   renderRecentMocksTable(cachedStudents, cachedMocks);
   renderTeacherAnnouncementsList(cachedAnnouncements);
+  renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
 }
 
 const createStudentForm = document.getElementById("create-student-form");
@@ -453,6 +465,15 @@ document.getElementById("close-inspector-btn").addEventListener("click", () => {
 
 function populateMockStudentDropdown(students) {
   const sel = document.getElementById("mock-student-select");
+  const currentVal = sel.value;
+  sel.innerHTML = `<option value="">-- Choose Student --</option>` +
+    students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
+  if (currentVal) sel.value = currentVal;
+}
+
+function populatePunishmentStudentDropdown(students) {
+  const sel = document.getElementById("pun-student-select");
+  if (!sel) return;
   const currentVal = sel.value;
   sel.innerHTML = `<option value="">-- Choose Student --</option>` +
     students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
@@ -698,6 +719,166 @@ window.saveTeacherGrade = async function (docId, noBandRequired = false) {
 document.getElementById("refresh-roster-btn").addEventListener("click", loadTeacherData);
 document.getElementById("refresh-matrix-btn").addEventListener("click", loadTeacherData);
 document.getElementById("refresh-grading-btn").addEventListener("click", loadTeacherData);
+const refreshPunishmentsBtn = document.getElementById("refresh-punishments-btn");
+if (refreshPunishmentsBtn) refreshPunishmentsBtn.addEventListener("click", loadTeacherData);
+
+// ==========================================
+// PUNISHMENTS & MAKEUP SYSTEM (TEACHER & STUDENT)
+// ==========================================
+const punSkillSelect = document.getElementById("pun-skill-select");
+if (punSkillSelect) {
+  punSkillSelect.addEventListener("change", renderPunishmentConfigInputs);
+  renderPunishmentConfigInputs();
+}
+
+function renderPunishmentConfigInputs() {
+  const skill = document.getElementById("pun-skill-select").value;
+  const container = document.getElementById("pun-config-container");
+  if (!container) return;
+
+  if (skill === "listening" || skill === "reading") {
+    container.innerHTML = `
+      <div class="form-group">
+        <label for="pun-count">Number of Test Sets / Passages</label>
+        <input type="number" id="pun-count" min="1" max="5" value="1" required />
+        <small class="muted">e.g., 1 to 2 listening or reading tests</small>
+      </div>
+    `;
+  } else if (skill === "speaking") {
+    container.innerHTML = `
+      <div class="form-group">
+        <label for="pun-spk-part">Speaking Part</label>
+        <select id="pun-spk-part">
+          <option value="Part 1 (Introduction & Interview)">Part 1 (Introduction & Interview)</option>
+          <option value="Part 2 (Long Turn / Cue Card)">Part 2 (Long Turn / Cue Card)</option>
+          <option value="Part 3 (Two-Way Discussion)">Part 3 (Two-Way Discussion)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="pun-spk-qty">Number of Questions / Topics</label>
+        <select id="pun-spk-qty">
+          <option value="10 Questions">10 Questions</option>
+          <option value="20 Questions">20 Questions</option>
+          <option value="50 Questions">50 Questions</option>
+          <option value="100 Questions">100 Questions</option>
+        </select>
+      </div>
+    `;
+  } else if (skill === "writing") {
+    container.innerHTML = `
+      <div class="form-group">
+        <label for="pun-wt-task">Writing Task Type</label>
+        <select id="pun-wt-task">
+          <option value="Task 1: Line Graph">Task 1: Line Graph</option>
+          <option value="Task 1: Bar Chart">Task 1: Bar Chart</option>
+          <option value="Task 1: Pie Chart">Task 1: Pie Chart</option>
+          <option value="Task 1: Table">Task 1: Table</option>
+          <option value="Task 1: Process Diagram / Map">Task 1: Process Diagram / Map</option>
+          <option value="Task 2: Opinion / Agreement Essay">Task 2: Opinion / Agreement Essay</option>
+          <option value="Task 2: Discussion Essay">Task 2: Discussion Essay</option>
+          <option value="Task 2: Problem & Solution Essay">Task 2: Problem & Solution Essay</option>
+          <option value="Task 2: Advantage & Disadvantage Essay">Task 2: Advantage & Disadvantage Essay</option>
+          <option value="Task 2: Two-Part Question Essay">Task 2: Two-Part Question Essay</option>
+        </select>
+      </div>
+    `;
+  }
+}
+
+const assignPunishmentForm = document.getElementById("assign-punishment-form");
+if (assignPunishmentForm) {
+  assignPunishmentForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("pun-assign-msg");
+    const btn = document.getElementById("assign-pun-btn");
+
+    const studentId = document.getElementById("pun-student-select").value;
+    const skill = document.getElementById("pun-skill-select").value;
+    const reason = document.getElementById("pun-reason").value.trim();
+    const dueDate = document.getElementById("pun-duedate").value;
+
+    let details = {};
+    if (skill === "listening" || skill === "reading") {
+      details.testCount = Number(document.getElementById("pun-count").value);
+    } else if (skill === "speaking") {
+      details.part = document.getElementById("pun-spk-part").value;
+      details.quantity = document.getElementById("pun-spk-qty").value;
+    } else if (skill === "writing") {
+      details.taskType = document.getElementById("pun-wt-task").value;
+    }
+
+    btn.disabled = true;
+    btn.textContent = "Assigning...";
+    msgEl.textContent = "";
+
+    try {
+      const punId = `PUN_${Date.now()}`;
+      await setDoc(doc(db, "punishments", punId), {
+        id: punId,
+        studentId,
+        skill,
+        reason,
+        details,
+        status: "pending",
+        dueDate,
+        assignedAt: serverTimestamp()
+      });
+
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = `Punishment successfully assigned to ${studentId}!`;
+      assignPunishmentForm.reset();
+      renderPunishmentConfigInputs();
+      loadTeacherData();
+    } catch (err) {
+      msgEl.style.color = "var(--danger)";
+      msgEl.textContent = "Error assigning punishment: " + err.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Assign Punishment";
+    }
+  });
+}
+
+function renderTeacherPunishments(punishments, students) {
+  const tbody = document.getElementById("group-punishments-tbody");
+  if (!tbody) return;
+
+  if (punishments.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="5" class="muted center">No active punishments assigned.</td></tr>`;
+    return;
+  }
+
+  const nameMap = {};
+  students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
+
+  tbody.innerHTML = punishments.map((p) => {
+    const sName = nameMap[p.studentId] || p.studentId;
+    let detailStr = "";
+    if (p.skill === "listening" || p.skill === "reading") detailStr = `${p.details.testCount} test set(s)`;
+    else if (p.skill === "speaking") detailStr = `${p.details.part} (${p.details.quantity})`;
+    else if (p.skill === "writing") detailStr = p.details.taskType;
+
+    const statusBadge = p.status === "verified" ? `<span class="badge badge-green">Verified</span>`
+      : p.status === "submitted" ? `<span class="badge badge-blue">Submitted</span>`
+      : `<span class="badge badge-red">Pending</span>`;
+
+    return `
+      <tr>
+        <td><strong>${p.studentId}</strong><br><span class="muted" style="font-size:12px;">${sName}</span></td>
+        <td><span class="role-pill">${p.skill.toUpperCase()}</span><br>${escapeHtml(p.reason)}</td>
+        <td>${escapeHtml(detailStr)}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(p.dueDate)}</span></td>
+        <td>${statusBadge}</td>
+        <td><button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deletePunishment('${p.id}')">Delete</button></td>
+      </tr>
+    `;
+  }).join("");
+}
+
+window.deletePunishment = async function (punId) {
+  if (!confirm("Remove this assigned punishment?")) return;
+  await deleteDoc(doc(db, "punishments", punId));
+  loadTeacherData();
+};
 
 // ==========================================
 // SHARED ANALYTICS RENDERERS (CHARTS & MISTAKES)
@@ -950,6 +1131,7 @@ async function initStudentData() {
   renderStudentAnnouncements(cachedAnnouncements);
   renderAssignmentsList();
   renderResourcesList("all");
+  renderStudentPunishmentsList();
 }
 
 function renderStudentAnnouncements(list) {
@@ -1914,23 +2096,30 @@ window.startBrowserRecording = async function () {
     mediaRecorder.onstop = () => {
       recordedAudioBlob = new Blob(recordedChunks, { type: "audio/webm" });
       const audioUrl = URL.createObjectURL(recordedAudioBlob);
-      document.getElementById("rec-audio-preview").src = audioUrl;
-      document.getElementById("rec-preview-area").classList.remove("hidden");
+      const audioPrev = document.getElementById("rec-audio-preview");
+      if (audioPrev) audioPrev.src = audioUrl;
+      const previewArea = document.getElementById("rec-preview-area");
+      if (previewArea) previewArea.classList.remove("hidden");
       stream.getTracks().forEach((track) => track.stop());
     };
 
     mediaRecorder.start();
     recSeconds = 0;
-    document.getElementById("rec-status-label").innerHTML = `<span class="rec-dot"></span> Recording in progress...`;
-    document.getElementById("btn-start-rec").classList.add("hidden");
-    document.getElementById("btn-stop-rec").classList.remove("hidden");
-    document.getElementById("rec-preview-area").classList.add("hidden");
+    const statusLabel = document.getElementById("rec-status-label");
+    if (statusLabel) statusLabel.innerHTML = `<span class="rec-dot"></span> Recording in progress...`;
+    const startBtn = document.getElementById("btn-start-rec");
+    if (startBtn) startBtn.classList.add("hidden");
+    const stopBtn = document.getElementById("btn-stop-rec");
+    if (stopBtn) stopBtn.classList.remove("hidden");
+    const previewArea = document.getElementById("rec-preview-area");
+    if (previewArea) previewArea.classList.add("hidden");
 
     recInterval = setInterval(() => {
       recSeconds++;
       const mins = String(Math.floor(recSeconds / 60)).padStart(2, "0");
       const secs = String(recSeconds % 60).padStart(2, "0");
-      document.getElementById("rec-timer-display").textContent = `${mins}:${secs}`;
+      const timerDisplay = document.getElementById("rec-timer-display");
+      if (timerDisplay) timerDisplay.textContent = `${mins}:${secs}`;
     }, 1000);
   } catch (err) {
     alert("Microphone access denied. Please allow microphone permissions in your browser.");
@@ -1942,10 +2131,15 @@ window.stopBrowserRecording = function () {
     mediaRecorder.stop();
   }
   clearInterval(recInterval);
-  document.getElementById("rec-status-label").textContent = "Recording captured — listen below or re-record";
-  document.getElementById("btn-stop-rec").classList.add("hidden");
-  document.getElementById("btn-start-rec").textContent = "↻ Re-record";
-  document.getElementById("btn-start-rec").classList.remove("hidden");
+  const statusLabel = document.getElementById("rec-status-label");
+  if (statusLabel) statusLabel.textContent = "Recording captured — listen below or re-record";
+  const stopBtn = document.getElementById("btn-stop-rec");
+  if (stopBtn) stopBtn.classList.add("hidden");
+  const startBtn = document.getElementById("btn-start-rec");
+  if (startBtn) {
+    startBtn.textContent = "↻ Re-record";
+    startBtn.classList.remove("hidden");
+  }
 };
 
 function stopActiveRecordingCleanup() {
@@ -2039,6 +2233,205 @@ async function submitGrammarHomework(hw) {
     btn.textContent = "Upload & Submit Grammar Homework";
   }
 }
+
+// ==========================================
+// STUDENT PUNISHMENTS & EXTRAS WORKFLOW
+// ==========================================
+async function renderStudentPunishmentsList() {
+  const container = document.getElementById("student-punishments-container");
+  if (!container) return;
+
+  const q = query(collection(db, "punishments"), where("studentId", "==", currentStudentId));
+  const snap = await getDocs(q);
+  const myPunishments = [];
+  snap.forEach((d) => myPunishments.push(d.data()));
+
+  const pendingCount = myPunishments.filter((p) => p.status !== "verified").length;
+  const badgeEl = document.getElementById("nav-punishment-badge");
+  if (badgeEl) badgeEl.textContent = pendingCount;
+
+  if (myPunishments.length === 0) {
+    container.innerHTML = `<p class="muted center" style="padding:32px 0;">🎉 You have no active punishments or extra practice assignments!</p>`;
+    return;
+  }
+
+  container.innerHTML = myPunishments.map((p) => {
+    let detailStr = "";
+    if (p.skill === "listening" || p.skill === "reading") detailStr = `${p.details.testCount} test set(s)`;
+    else if (p.skill === "speaking") detailStr = `${p.details.part} — ${p.details.quantity}`;
+    else if (p.skill === "writing") detailStr = p.details.taskType;
+
+    const statusBadge = p.status === "verified" ? `<span class="badge badge-green">Completed & Verified</span>`
+      : p.status === "submitted" ? `<span class="badge badge-blue">Submitted (Pending Review)</span>`
+      : `<span class="badge badge-red">Pending Due ${formatDueDate(p.dueDate)}</span>`;
+
+    const actionBtn = p.status === "verified"
+      ? `<span class="muted" style="font-size:13px;">Cleared</span>`
+      : `<button class="btn btn-primary btn-sm" onclick="window.startPunishmentRunner('${p.id}')">Complete & Submit</button>`;
+
+    return `
+      <div class="hw-item">
+        <div style="flex:1;">
+          <span class="role-pill">${p.skill.toUpperCase()}</span>
+          <strong>${escapeHtml(p.reason)}</strong>
+          <div style="font-size:13px;color:var(--text);margin-top:4px;">Requirements: ${escapeHtml(detailStr)}</div>
+          <div class="hw-meta" style="margin-top:6px;"><span>Deadline: ${formatDueDate(p.dueDate)}</span>${statusBadge}</div>
+        </div>
+        <div>${actionBtn}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+let activePunishment = null;
+
+window.startPunishmentRunner = async function (punId) {
+  const snap = await getDoc(doc(db, "punishments", punId));
+  if (!snap.exists()) return;
+  activePunishment = snap.data();
+
+  const containerCard = document.getElementById("student-punishments-container")?.parentElement?.querySelector(".card");
+  if (containerCard) containerCard.classList.add("hidden");
+  const cont = document.getElementById("student-punishments-container");
+  if (cont) cont.classList.add("hidden");
+  const runnerView = document.getElementById("punishment-runner-view");
+  if (runnerView) runnerView.classList.remove("hidden");
+
+  const titleEl = document.getElementById("punishment-runner-title");
+  if (titleEl) titleEl.textContent = activePunishment.reason;
+  const dueEl = document.getElementById("punishment-runner-due");
+  if (dueEl) dueEl.textContent = `Due: ${formatDueDate(activePunishment.dueDate)}`;
+
+  const leftPane = document.getElementById("pun-runner-left");
+  const rightPane = document.getElementById("pun-runner-right");
+
+  if (leftPane) {
+    leftPane.innerHTML = `
+      <h3>Punishment Instructions</h3>
+      <p class="passage-box">Complete your assigned ${activePunishment.skill.toUpperCase()} practice requirement and submit your proof below.</p>
+      <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;margin-top:12px;">
+        <strong>Requirements:</strong><br/>
+        ${activePunishment.skill === "listening" || activePunishment.skill === "reading" ? `Complete ${activePunishment.details.testCount} test set(s) and upload your score screenshot.` : ""}
+        ${activePunishment.skill === "speaking" ? `Record your answers for ${activePunishment.details.part} (${activePunishment.details.quantity}).` : ""}
+        ${activePunishment.skill === "writing" ? `Write your essay for: ${activePunishment.details.taskType} (min 150 words for Task 1, min 250 words for Task 2).` : ""}
+      </div>
+    `;
+  }
+
+  if (rightPane) {
+    if (activePunishment.skill === "listening" || activePunishment.skill === "reading") {
+      rightPane.innerHTML = `
+        <h3>Submit Score & Screenshot</h3>
+        <div class="form-group">
+          <label for="pun-lr-score">Correct Answers / Score Summary</label>
+          <input type="text" id="pun-lr-score" placeholder="e.g., 34 / 40" required />
+        </div>
+        <div class="form-group">
+          <label for="pun-lr-file">Result Screenshot (PNG / JPG)</label>
+          <input type="file" id="pun-lr-file" accept="image/*" required />
+        </div>
+        <button class="btn btn-primary btn-full" id="submit-pun-lr-btn">Submit Punishment Proof</button>
+      `;
+      document.getElementById("submit-pun-lr-btn").addEventListener("click", submitPunishmentScreenshot);
+    } else if (activePunishment.skill === "speaking") {
+      rightPane.innerHTML = `
+        <h3>Record Speaking Answer</h3>
+        <div style="text-align:center;padding:24px 0;">
+          <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
+          <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
+          <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+            <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
+            <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+          </div>
+          <div id="rec-preview-area" class="hidden" style="margin-top:16px;">
+            <audio id="rec-audio-preview" controls style="width:100%;"></audio>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="submitPunishmentAudio()">Upload & Submit Speaking</button>
+      `;
+    } else if (activePunishment.skill === "writing") {
+      rightPane.innerHTML = `
+        <h3>Submit Essay Response</h3>
+        <div class="form-group">
+          <label for="pun-writing-input">Type your essay / report here</label>
+          <textarea id="pun-writing-input" rows="10" placeholder="Type your response..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="submitPunishmentWriting()">Submit Writing</button>
+      `;
+    }
+  }
+};
+
+const backPunBtn = document.getElementById("back-to-punishments-btn");
+if (backPunBtn) {
+  backPunBtn.addEventListener("click", () => {
+    document.getElementById("punishment-runner-view").classList.add("hidden");
+    const containerCard = document.getElementById("student-punishments-container")?.parentElement?.querySelector(".card");
+    if (containerCard) containerCard.classList.remove("hidden");
+    const cont = document.getElementById("student-punishments-container");
+    if (cont) cont.classList.remove("hidden");
+    renderStudentPunishmentsList();
+  });
+}
+
+async function submitPunishmentScreenshot() {
+  const fileInput = document.getElementById("pun-lr-file");
+  const file = fileInput.files[0];
+  const scoreText = document.getElementById("pun-lr-score").value.trim();
+  if (!file || !scoreText) return alert("Please enter your score and attach a screenshot.");
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Upload failed.");
+
+  await updateDoc(doc(db, "punishments", activePunishment.id), {
+    status: "submitted",
+    submission: { scoreText, screenshotUrl: data.secure_url },
+    submittedAt: serverTimestamp()
+  });
+
+  alert("Punishment submitted successfully!");
+  document.getElementById("back-to-punishments-btn").click();
+}
+
+async function submitPunishmentWriting() {
+  const text = document.getElementById("pun-writing-input").value.trim();
+  if (!text) return alert("Please write your essay.");
+
+  await updateDoc(doc(db, "punishments", activePunishment.id), {
+    status: "submitted",
+    submission: { essayText: text, wordCount: text.split(/\s+/).length },
+    submittedAt: serverTimestamp()
+  });
+
+  alert("Punishment submitted successfully!");
+  document.getElementById("back-to-punishments-btn").click();
+}
+
+window.submitPunishmentAudio = async function () {
+  if (!recordedAudioBlob) return alert("Please record your audio first.");
+
+  const formData = new FormData();
+  formData.append("file", recordedAudioBlob, `pun_${activePunishment.id}.webm`);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Audio upload failed.");
+
+  await updateDoc(doc(db, "punishments", activePunishment.id), {
+    status: "submitted",
+    submission: { audioUrl: data.secure_url },
+    submittedAt: serverTimestamp()
+  });
+
+  alert("Speaking punishment submitted!");
+  document.getElementById("back-to-punishments-btn").click();
+};
 
 // ==========================================
 // STUDENT: CURATED PRACTICE RESOURCES
