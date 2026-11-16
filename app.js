@@ -1614,7 +1614,78 @@ window.startAssignment = function (assignmentId) {
 
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
     }
+  } else if (hw.skill === "writing") {
+    leftPane.innerHTML = `
+      <h3>Writing Prompt & Guidelines</h3>
+      <div class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.promptText || hw.instructions)}</div>
+    `;
+
+    const chartUploadHtml = hw.id === "HW-05" ? `
+      <div class="form-group">
+        <label for="writing-chart-file">Upload Line Graph / Chart Image (Required)</label>
+        <input type="file" id="writing-chart-file" accept="image/*" required />
+      </div>
+    ` : "";
+
+    rightPane.innerHTML = `
+      <h3>Your Essay / Report Response</h3>
+      ${chartUploadHtml}
+      <div class="form-group">
+        <label for="writing-essay-input">Type your response here (min ${hw.minWords || 150} words)</label>
+        <textarea id="writing-essay-input" rows="12" placeholder="Start writing your report or essay here..." style="width:100%;padding:10px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;"></textarea>
+      </div>
+      <button class="btn btn-primary btn-full" id="submit-writing-btn">Submit Writing</button>
+    `;
+
+    document.getElementById("submit-writing-btn").addEventListener("click", () => submitWritingHomework(hw));
+  } else if (hw.skill === "speaking") {
+    leftPane.innerHTML = `
+      <h3>Speaking Instructions</h3>
+      <p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
+      <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;">
+        <strong>Recording Tips:</strong><br/>
+        Find a quiet room, click "Start Recording", speak clearly into your microphone, and listen to your playback before submitting.
+      </div>
+    `;
+
+    rightPane.innerHTML = `
+      <h3>Record Speaking Response</h3>
+      <div style="text-align:center;padding:24px 0;">
+        <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
+        <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
+        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
+          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+        </div>
+        <div id="rec-preview-area" class="hidden" style="margin-top:16px;">
+          <audio id="rec-audio-preview" controls style="width:100%;"></audio>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" id="submit-speaking-btn" onclick="submitSpeakingHomework(hw)">Upload & Submit Recording</button>
+    `;
+  } else if (hw.skill === "grammar") {
+    leftPane.innerHTML = `
+      <h3>Grammar Workbook Instructions</h3>
+      <p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
+    `;
+
+    rightPane.innerHTML = `
+      <h3>Upload Completed Pages</h3>
+      <div class="form-group">
+        <label for="gram-file">Workbook Photo / Screenshot</label>
+        <input type="file" id="gram-file" accept="image/*" required />
+      </div>
+      <div class="form-group">
+        <label for="gram-notes">Student Notes / Questions (Optional)</label>
+        <input type="text" id="gram-notes" placeholder="e.g., Had trouble with exercise 4..." />
+      </div>
+      <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit Grammar Homework</button>
+    `;
+
+    document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
   }
+}; 
+// End of window.startAssignment
 
 async function submitScreenshotHomework(hw) {
   const isDrill = Boolean(hw.isDrill);
