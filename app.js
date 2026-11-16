@@ -2332,6 +2332,104 @@ document.querySelectorAll(".res-filter-btn").forEach((btn) => {
   });
 });
 
+function renderStatisticsPage() {
+  const subsArr = Object.values(studentSubmissionsMap);
+
+  studentChartInstance = buildScoreChart("student-score-chart", subsArr, studentMocksList, studentChartInstance);
+  groupCompareChartInstance = buildGroupCompareChart("group-compare-chart", studentMocksList, allGroupMocks, groupCompareChartInstance);
+
+  renderMistakeBars(
+    "dash-permanent-mistakes",
+    currentStudentProfile.permanentMistakes || {},
+    "No question-type mistakes logged yet.",
+    "var(--danger)"
+  );
+
+  const groupMistakeTotals = {};
+  allGroupUsers.forEach((u) => {
+    Object.entries(u.permanentMistakes || {}).forEach(([type, val]) => {
+      const count = val.wrong || 0;
+      if (count > 0) {
+        groupMistakeTotals[type] = (groupMistakeTotals[type] || 0) + count;
+      }
+    });
+  });
+
+  renderMistakeBars(
+    "group-common-mistakes",
+    groupMistakeTotals,
+    "No group mistake data logged yet.",
+    "var(--warning)"
+  );
+
+  const yesterday = getTodayStr(-1);
+  const rankedStudents = allGroupUsers.map((u) => {
+    const st = u.ankiStats || {};
+    const liveStreak = (st.lastReviewedDate && st.lastReviewedDate >= yesterday) ? (st.streak || 0) : 0;
+    return {
+      studentId: u.studentId,
+      fullName: u.fullName,
+      streak: liveStreak,
+      totalReviewed: st.totalReviewed || 0
+    };
+  }).sort((a, b) => (b.streak - a.streak) || (b.totalReviewed - a.totalReviewed));
+
+  const lbBody = document.getElementById("effort-leaderboard-tbody");
+  lbBody.innerHTML = rankedStudents.map((s, idx) => {
+    const isMe = s.studentId === currentStudentId;
+    const medal = idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`;
+    return `
+      <tr style="${isMe ? "background:#eff6ff;" : ""}">
+        <td><strong>${medal}</strong></td>
+        <td>${escapeHtml(s.fullName)} ${isMe ? `<span class="badge badge-blue" style="margin-left:4px;">You</span>` : ""}</td>
+        <td>🔥 ${s.streak} days</td>
+        <td>${s.totalReviewed} cards</td>
+      </tr>
+    `;
+  }).join("");
+
+  const feedbackItems = subsArr.filter((sub) => sub.teacherFeedback || sub.status === "graded");
+  const fbContainer = document.getElementById("teacher-feedback-feed");
+
+  if (feedbackItems.length === 0) {
+    fbContainer.innerHTML = `<p class="muted">No teacher feedback yet. Once your teacher reviews your submissions, comments will appear here.</p>`;
+  } else {
+    fbContainer.innerHTML = feedbackItems.map((sub) => {
+      const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+      const title = hw ? hw.title : sub.assignmentId;
+      const bandPill = sub.bandScore ? `<span class="badge badge-green">Band ${sub.bandScore}</span>` : `<span class="badge badge-green">Checked</span>`;
+      return `
+        <div class="hw-item" style="flex-direction:column;align-items:stretch;padding:14px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+            <strong>${escapeHtml(title)}</strong>
+            ${bandPill}
+          </div>
+          ${sub.teacherFeedback
+            ? `<div class="feedback-callout" style="margin-top:8px;">${escapeHtml(sub.teacherFeedback)}</div>`
+            : `<span class="muted" style="font-size:13px;margin-top:4px;margin-bottom:0;">Verified by teacher (no written note).</span>`}
+        </div>
+      `;
+    }).join("");
+  }
+
+  const mocksTbody = document.getElementById("student-mocks-tbody");
+  if (studentMocksList.length === 0) {
+    mocksTbody.innerHTML = `<tr><td colspan="7" class="muted center">No mock exam scores recorded yet.</td></tr>`;
+  } else {
+    mocksTbody.innerHTML = [...studentMocksList].reverse().map((m) => `
+      <tr>
+        <td>${m.date || "—"}</td>
+        <td><strong>${escapeHtml(m.mockTitle)}</strong></td>
+        <td>${m.listening}</td>
+        <td>${m.reading}</td>
+        <td>${m.writing}</td>
+        <td>${m.speaking}</td>
+        <td><span class="badge badge-blue">Band ${m.overall}</span></td>
+      </tr>
+    `).join("");
+  }
+}
+
 function buildScoreChart(canvasId, subs, mocks, existing) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === "undefined") return existing;
