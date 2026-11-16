@@ -173,14 +173,23 @@ loginForm.addEventListener("submit", async (e) => {
   const password = document.getElementById("login-password").value;
   const btn = document.getElementById("login-btn");
 
+  if (btn.disabled) return; // Prevent double submission
+
   btn.disabled = true;
   btn.textContent = "Signing in...";
+
+  // Safety timeout: Re-enable button after 10 seconds if Firebase hangs
+  const timeoutId = setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = "Sign In";
+    loginError.textContent = "Connection timed out. Please check your network.";
+  }, 10000);
 
   try {
     await signInWithEmailAndPassword(auth, formatLoginEmail(rawId), password);
   } catch (err) {
+    clearTimeout(timeoutId);
     loginError.textContent = "Invalid Student ID or password. Please try again.";
-  } finally {
     btn.disabled = false;
     btn.textContent = "Sign In";
   }
