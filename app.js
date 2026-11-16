@@ -62,6 +62,7 @@ let allGroupMocks = [];
 let cachedAnnouncements = [];
 let cachedStudentPunishments = [];
 
+
 let studentChartInstance = null;
 let groupCompareChartInstance = null;
 let inspectorChartInstance = null;
@@ -77,6 +78,9 @@ let recordedChunks = [];
 let recordedAudioBlob = null;
 let recInterval = null;
 let recSeconds = 0;
+
+let activeDynamicTask = null;
+let activeDynamicCollection = null;
 
 function rawToIeltsBand(raw, total = 40) {
   const scaled = Math.round((raw / total) * 40);
@@ -1827,20 +1831,11 @@ window.startAssignment = function (assignmentId) {
         <div class="form-group"><label>Score Breakdown</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 14px;">${drillRowsHtml}</div></div>
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Drill</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
-   } else {
+    } else {
       const totalQ = hw.totalQuestions || 40;
       const mistakeTypes = hw.skill === "reading"
-        ? [
-            { key: "MCQ", label: "Multiple Choice" }, { key: "TFNG", label: "True / False / Not Given" }, { key: "YNNG", label: "Yes / No / Not Given" },
-            { key: "MATCHING_HEADINGS", label: "Matching Headings" }, { key: "MATCHING_INFO", label: "Matching Information" }, { key: "MATCHING_FEATURES", label: "Matching Features" },
-            { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
-            { key: "SUMMARY_COMPLETION", label: "Summary Completion" }, { key: "NOTE_COMPLETION", label: "Note Completion" }, { key: "TABLE_COMPLETION", label: "Table Completion" },
-            { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" }, { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
-          ]
-        : [
-            { key: "MCQ", label: "Multiple Choice" }, { key: "MATCHING", label: "Matching" }, { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
-            { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
-          ];
+        ? [ { key: "MCQ", label: "Multiple Choice" }, { key: "TFNG", label: "True / False / Not Given" }, { key: "YNNG", label: "Yes / No / Not Given" }, { key: "MATCHING_HEADINGS", label: "Matching Headings" }, { key: "MATCHING_INFO", label: "Matching Information" }, { key: "MATCHING_FEATURES", label: "Matching Features" }, { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SUMMARY_COMPLETION", label: "Summary Completion" }, { key: "NOTE_COMPLETION", label: "Note Completion" }, { key: "TABLE_COMPLETION", label: "Table Completion" }, { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" }, { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" } ]
+        : [ { key: "MCQ", label: "Multiple Choice" }, { key: "MATCHING", label: "Matching" }, { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" }, { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" } ];
       
       leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
         <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How to log your mistakes:</strong><br/>Count how many questions you missed in each category.</div>`;
@@ -1855,6 +1850,49 @@ window.startAssignment = function (assignmentId) {
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Score</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
     }
+  } else if (hw.skill === "writing") {
+    const chartHtml = hw.isTask1 || hw.id === "HW-05" ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" required /></div>` : "";
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.promptText || hw.title)}</p>`;
+    rightPane.innerHTML = `<h3>Your Essay / Report Response</h3>
+      ${chartHtml}
+      <div class="form-group"><label>Type your response here</label><textarea id="writing-essay-input" rows="12" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
+      <button class="btn btn-primary btn-full" id="submit-writing-btn">Submit Writing</button>`;
+    document.getElementById("submit-writing-btn").addEventListener("click", () => submitWritingHomework(hw));
+  } else if (hw.skill === "speaking") {
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    rightPane.innerHTML = `
+      <h3>Record Speaking Answer</h3>
+      <div style="text-align:center;padding:24px 0;">
+        <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
+        <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
+        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
+          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+        </div>
+        <div id="rec-preview-area" class="hidden" style="margin-top:16px;"><audio id="rec-audio-preview" controls style="width:100%;"></audio></div>
+      </div>
+      <button class="btn btn-primary btn-full" id="submit-speaking-btn" onclick="submitSpeakingHomework('${hw.id}')">Upload & Submit Speaking</button>
+    `;
+  } else if (hw.skill === "grammar") {
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    rightPane.innerHTML = `
+      <h3>Upload Completed Pages</h3>
+      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="gram-file" accept="image/*" required /></div>
+      <div class="form-group"><label>Student Notes / Questions (Optional)</label><input type="text" id="gram-notes" /></div>
+      <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit Homework</button>
+    `;
+    document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
+  } else {
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    rightPane.innerHTML = `
+      <h3>Submit Task Response</h3>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" /></div>
+      <div class="form-group"><label>Type your answer or notes here</label><textarea id="other-notes" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
+      <button class="btn btn-primary btn-full" id="submit-other-btn">Submit Task</button>
+    `;
+    document.getElementById("submit-other-btn").addEventListener("click", () => submitOtherHomework(hw));
+  }
+};
 
 // --- Submission Handlers (Shared) ---
 async function submitScreenshotHomework(hw) {
