@@ -54,7 +54,6 @@
       <button class="nav-tab active" data-target="student-dashboard">Home</button>
       <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
-      <button class="nav-tab" data-target="student-punishments">Punishments & Extras <span id="nav-punishment-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-stats">Statistics & Progress</button>
       <button class="nav-tab" data-target="student-resources">Practice Resources</button>
       <button class="nav-tab" data-target="student-attendance">Attendance</button>
@@ -67,8 +66,7 @@
       <button class="nav-tab" data-target="teacher-grading">Grading Queue <span id="nav-grade-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
       <button class="nav-tab" data-target="teacher-announcements">Announcements</button>
-      <button class="nav-tab" data-target="teacher-homework-builder">Assign Homework</button>
-      <button class="nav-tab" data-target="teacher-punishments">Punishments & Extras</button>
+      <button class="nav-tab" data-target="teacher-tasks">Assign Tasks</button>
       <button class="nav-tab" data-target="teacher-attendance">Attendance Tracker</button>
     </nav>
 
@@ -292,121 +290,61 @@
         </div>
       </section>
 
-      <!-- 6. TEACHER AUTOMATED HOMEWORK BUILDER -->
-      <section id="teacher-homework-builder" class="view-section hidden">
+      <!-- 6. TEACHER ASSIGN TASKS DISPATCHER -->
+      <section id="teacher-tasks" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
-            <h2>📝 Create & Assign Homework</h2>
-            <p class="muted">Build automated tasks for Listening, Reading, Writing, or Speaking for a student or the entire class.</p>
-            <form id="create-hw-form">
+            <h2>⚡ Assign Tasks & Practice</h2>
+            <p class="muted">Instantly assign listening, reading, speaking, or custom tasks to a student or the entire Ambition Group class.</p>
+            <form id="assign-task-form">
               <div class="form-group">
-                <label for="hw-target-select">Target Student / Class</label>
-                <select id="hw-target-select" required>
+                <label for="task-student-select">Target Student / Class</label>
+                <select id="task-student-select" required>
                   <option value="">-- Choose Target --</option>
                   <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
                 </select>
               </div>
 
               <div class="form-group">
-                <label for="hw-skill-select">Skill Category</label>
-                <select id="hw-skill-select" required>
-                  <option value="listening">🎧 Listening</option>
-                  <option value="reading">📖 Reading</option>
-                  <option value="writing">✍️ Writing</option>
-                  <option value="speaking">🗣️ Speaking</option>
+                <label for="task-skill-select">Skill Category</label>
+                <select id="task-skill-select" required>
+                  <option value="listening">🎧 Listening (Test Sets)</option>
+                  <option value="reading">📖 Reading (Test Sets)</option>
+                  <option value="speaking">🗣️ Speaking (Topic & Notes)</option>
+                  <option value="other">📝 Custom / Other Task</option>
                 </select>
               </div>
 
-              <div id="hw-dynamic-config"></div>
+              <div id="task-config-container"></div>
 
               <div class="form-group">
-                <label for="hw-duedate">Due Date & Time</label>
-                <input type="datetime-local" id="hw-duedate" required />
+                <label for="task-duedate">Due Date & Time</label>
+                <input type="datetime-local" id="task-duedate" required />
               </div>
 
-              <button type="submit" class="btn btn-primary btn-full" id="dispatch-hw-btn">Publish Homework 🚀</button>
-              <p id="hw-dispatch-msg" class="status-msg"></p>
+              <button type="submit" class="btn btn-primary btn-full" id="assign-task-btn">Assign Task 🚀</button>
+              <p id="task-assign-msg" class="status-msg"></p>
             </form>
           </div>
 
           <div class="card">
             <div class="card-header-flex">
-              <h2>Active Custom Homework</h2>
-              <button id="refresh-hw-builder-btn" class="btn btn-outline btn-sm">Refresh</button>
+              <h2>Active Assigned Tasks</h2>
+              <button id="refresh-tasks-btn" class="btn btn-outline btn-sm">Refresh</button>
             </div>
             <div class="table-wrapper">
               <table>
                 <thead>
                   <tr>
                     <th>Target</th>
-                    <th>Skill & Details</th>
-                    <th>Due Date</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody id="group-hw-builder-tbody">
-                  <tr><td colspan="4" class="muted center">Loading assignments...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7. TEACHER PUNISHMENTS & EXTRAS DISPATCHER -->
-      <section id="teacher-punishments" class="view-section hidden">
-        <div class="grid-2col">
-          <div class="card">
-            <h2>⚡ Punishments & Extras Dispatcher</h2>
-            <p class="muted">Assign automated remedial tasks and extra practice across all four sections.</p>
-            <form id="assign-punishment-form">
-              <div class="form-group">
-                <label for="pun-student-select">Target Student / Class</label>
-                <select id="pun-student-select" required>
-                  <option value="">-- Choose Target --</option>
-                  <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
-                </select>
-              </div>
-
-              <div class="form-group">
-                <label for="pun-skill-select">Skill Category</label>
-                <select id="pun-skill-select" required>
-                  <option value="listening">🎧 Listening</option>
-                  <option value="reading">📖 Reading</option>
-                  <option value="writing">✍️ Writing</option>
-                  <option value="speaking">🗣️ Speaking</option>
-                </select>
-              </div>
-
-              <div id="pun-dynamic-config"></div>
-
-              <div class="form-group">
-                <label for="pun-duedate">Due Date & Time</label>
-                <input type="datetime-local" id="pun-duedate" required />
-              </div>
-
-              <button type="submit" class="btn btn-primary btn-full" id="assign-pun-btn">Assign Task 🚀</button>
-              <p id="pun-assign-msg" class="status-msg"></p>
-            </form>
-          </div>
-
-          <div class="card">
-            <div class="card-header-flex">
-              <h2>Active Punishments & Extras</h2>
-              <button id="refresh-punishments-btn" class="btn btn-outline btn-sm">Refresh</button>
-            </div>
-            <div class="table-wrapper">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Target</th>
-                    <th>Skill & Details</th>
+                    <th>Skill & Title</th>
+                    <th>Details</th>
                     <th>Status</th>
                     <th>Action</th>
                   </tr>
                 </thead>
-                <tbody id="group-punishments-tbody">
-                  <tr><td colspan="4" class="muted center">Loading records...</td></tr>
+                <tbody id="group-tasks-tbody">
+                  <tr><td colspan="5" class="muted center">Loading tasks...</td></tr>
                 </tbody>
               </table>
             </div>
@@ -414,7 +352,7 @@
         </div>
       </section>
 
-      <!-- 8. TEACHER ATTENDANCE TRACKER -->
+      <!-- 7. TEACHER ATTENDANCE TRACKER -->
       <section id="teacher-attendance" class="view-section hidden">
         <div class="grid-2col">
           <div class="card center">
@@ -452,7 +390,7 @@
       </section>
 
       <!-- ==================== STUDENT VIEWS ==================== -->
-      <!-- 1. STUDENT HOME -->
+      <!-- 1. STUDENT HOME (Action-Focused Daily Hub) -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -578,7 +516,7 @@
         </div>
       </section>
 
-      <!-- 3. STUDENT ASSIGNMENTS LIST -->
+      <!-- 3. STUDENT ASSIGNMENTS LIST (Now Includes Assigned Tasks) -->
       <section id="student-homework" class="view-section hidden">
         <div id="hw-list-view">
           <div class="card">
@@ -588,7 +526,7 @@
           </div>
         </div>
 
-        <!-- ACTIVE TEST RUNNER -->
+        <!-- ACTIVE TEST RUNNER (Split Screen) -->
         <div id="hw-runner-view" class="hidden">
           <div class="runner-topbar">
             <button id="back-to-hw-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
@@ -602,7 +540,7 @@
           </div>
         </div>
 
-        <!-- SUMMARY VIEW -->
+        <!-- SUMMARY / RECEIPT VIEW FOR COMPLETED L/R -->
         <div id="hw-analysis-view" class="hidden">
           <div class="runner-topbar">
             <button id="back-from-analysis-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
@@ -637,33 +575,24 @@
             </div>
           </div>
         </div>
-      </section>
 
-      <!-- 4. STUDENT PUNISHMENTS & EXTRAS -->
-      <section id="student-punishments" class="view-section hidden">
-        <div class="card" style="margin-bottom:20px;">
-          <h2>Punishments & Extras</h2>
-          <p class="muted" style="margin-bottom:0;">Remedial tasks and extra practice assigned by your teacher. Complete these before the deadline.</p>
-        </div>
-        <div id="student-punishments-container" class="hw-grid">
-          <p class="muted center">Loading records...</p>
-        </div>
-
-        <div id="punishment-runner-view" class="hidden" style="margin-top:20px;">
+        <!-- TASK RUNNER VIEW FOR DYNAMIC TASKS -->
+        <div id="task-runner-view" class="hidden" style="margin-top:20px;">
           <div class="runner-topbar">
-            <button id="back-to-punishments-btn" class="btn btn-outline btn-sm">← Back to Punishments & Extras</button>
-            <h3 id="punishment-runner-title">Complete Task</h3>
-            <span id="punishment-runner-due" class="role-pill">Due</span>
+            <button id="back-to-tasks-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
+            <h3 id="task-runner-title">Complete Task</h3>
+            <span id="task-runner-due" class="role-pill">Due</span>
           </div>
           <div class="grid-2col" style="margin-top:16px;">
-            <div class="card" id="pun-runner-left"></div>
-            <div class="card" id="pun-runner-right"></div>
+            <div class="card" id="task-runner-left"></div>
+            <div class="card" id="task-runner-right"></div>
           </div>
         </div>
       </section>
 
-      <!-- 5. STATISTICS & PROGRESS -->
+      <!-- 4. DEDICATED STATISTICS, GROUP BENCHMARKS & FEEDBACK PAGE -->
       <section id="student-stats" class="view-section hidden">
+        <!-- ROW 1: PERSONAL TRAJECTORY + ANONYMOUS GROUP BENCHMARK -->
         <div class="grid-2col" style="margin-bottom: 24px;">
           <div class="card">
             <h3>Your IELTS Score Trajectory</h3>
@@ -682,6 +611,7 @@
           </div>
         </div>
 
+        <!-- ROW 2: YOUR WEAKNESSES vs GROUP COMMON MISTAKES -->
         <div class="grid-2col" style="margin-bottom: 24px;">
           <div class="card">
             <h3>Your Weakest Question Types</h3>
@@ -696,6 +626,7 @@
           </div>
         </div>
 
+        <!-- ROW 3: EFFORT LEADERBOARD + CENTRALIZED TEACHER FEEDBACK -->
         <div class="grid-2col" style="margin-bottom: 24px;">
           <div class="card">
             <h3>Daily Consistency Leaderboard</h3>
@@ -724,6 +655,7 @@
           </div>
         </div>
 
+        <!-- ROW 4: MOCK EXAM HISTORY TABLE -->
         <div class="card">
           <h3>Your Mock Exam History</h3>
           <p class="muted">Official Mock Exam scores entered by your teacher:</p>
@@ -748,7 +680,7 @@
         </div>
       </section>
 
-      <!-- 6. PRACTICE RESOURCES -->
+      <!-- 5. STUDENT PRACTICE RESOURCES -->
       <section id="student-resources" class="view-section hidden">
         <div class="card">
           <div class="card-header-flex" style="flex-wrap:wrap;">
@@ -768,7 +700,7 @@
         </div>
       </section>
 
-      <!-- 7. ATTENDANCE CHECK-IN -->
+      <!-- 6. STUDENT ATTENDANCE CHECK-IN -->
       <section id="student-attendance" class="view-section hidden">
         <div class="card center" style="padding: 40px 24px;">
           <div style="font-size: 48px; margin-bottom: 12px;">📸</div>
