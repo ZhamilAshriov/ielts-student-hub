@@ -217,6 +217,7 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("teacher-nav").classList.add("hidden");
     switchView("student-dashboard");
     await initStudentData();
+    await handleUrlCheckInToken();
   }
 });
 
@@ -233,6 +234,8 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
       renderStatisticsPage();
     } else if (tab.dataset.target === "student-punishments") {
       renderStudentPunishmentsList();
+    } else if (tab.dataset.target === "teacher-attendance") {
+      renderTeacherAttendanceManager();
     }
   });
 });
@@ -254,7 +257,7 @@ document.getElementById("dash-go-stats-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// TEACHER: ROSTER, MATRIX, GRADING, MOCKS, ANNOUNCEMENTS & PUNISHMENTS
+// TEACHER: ROSTER, MATRIX, GRADING, MOCKS, ANNOUNCEMENTS, PUNISHMENTS & ATTENDANCE
 // ==========================================
 async function loadTeacherData() {
   const [usersSnap, subsSnap, mocksSnap, annSnap, punSnap] = await Promise.all([
@@ -294,6 +297,7 @@ async function loadTeacherData() {
   renderRecentMocksTable(cachedStudents, cachedMocks);
   renderTeacherAnnouncementsList(cachedAnnouncements);
   renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+  renderTeacherAttendanceManager();
 }
 
 const createStudentForm = document.getElementById("create-student-form");
@@ -720,6 +724,91 @@ document.getElementById("refresh-matrix-btn").addEventListener("click", loadTeac
 document.getElementById("refresh-grading-btn").addEventListener("click", loadTeacherData);
 const refreshPunishmentsBtn = document.getElementById("refresh-punishments-btn");
 if (refreshPunishmentsBtn) refreshPunishmentsBtn.addEventListener("click", loadTeacherData);
+
+// ==========================================
+// ATTENDANCE & QR CODE SYSTEM (TEACHER & STUDENT)
+// ==========================================
+async function renderTeacherAttendanceManager() {
+  const canvas = document.getElementById("teacher-qr-canvas");
+  const dateLabel = document.getElementById("qr-date-label");
+  if (!canvas) return;
+
+  const today = getTodayStr();
+  dateLabel.textContent = `Lesson Date: ${today}`;
+
+  const checkinUrl = `${window.location.origin}${window.location.pathname}?checkin=${today}`;
+
+  QRCode.toCanvas(canvas, checkinUrl, { width: 200, margin: 2, color: { dark: "#0f172a", light: "#ffffff" } }, (error) => {
+    if (error) console.error("QR Generation error:", error);
+  });
+
+  const attSnap = await getDocs(query(collection(db, "attendance"), where("date", "==", today)));
+  const attendedMap = {};
+  attSnap.forEach((d) => { attendedMap[d.data().studentId] = d.data(); });
+
+  const tbody = document.getElementById("teacher-attendance-tbody");
+  if (cachedStudents.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="4" class="muted center">No students in roster.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = cachedStudents.map((s) => {
+    const record = attendedMap[s.studentId];
+    const status = record?.status || "Absent";
+    const timeStr = record?.checkedInAt?.toDate 
+      ? record.checkedInAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+      : "—";
+
+    let badgeClass = "badge-red";
+    if (status === "Present") badgeClass = "badge-green";
+    else if (status === "Late") badgeClass = "badge-yellow";
+
+    return `
+      <tr>
+        <td><strong>${s.studentId}</strong></td>
+        <td>${escapeHtml(s.fullName)}</td>
+        <td><span class="badge ${badgeClass}">${status}</span></td>
+        <td>${timeStr}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+const refreshAttBtn = document.getElementById("refresh-attendance-table-btn");
+const refreshQrBtn = document.getElementById("refresh-qr-btn");
+if (refreshAttBtn) refreshAttBtn.addEventListener("click", renderTeacherAttendanceManager);
+if (refreshQrBtn) refreshQrBtn.addEventListener("click", renderTeacherAttendanceManager);
+
+async function handleUrlCheckInToken() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const checkinDate = urlParams.get("checkin");
+  if (!checkinDate || !currentStudentId) return;
+
+  try {
+    const now = new Date();
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const totalMinutes = hours * 60 + minutes;
+    const cutoffMinutes = 9 * 60 + 15; // 9:15 AM cutoff example
+    const status = totalMinutes <= cutoffMinutes ? "Present" : "Late";
+
+    const docId = `${checkinDate}_${currentStudentId}`;
+    await setDoc(doc(db, "attendance", docId), {
+      studentId: currentStudentId,
+      date: checkinDate,
+      status,
+      checkedInAt: serverTimestamp()
+    }, { merge: true });
+
+    document.getElementById("checkin-status-box").innerHTML = `
+      <span style="color: var(--success); font-size: 18px;">✅ Attendance Logged as "${status}"!</span>
+      <div class="muted" style="font-size: 13px; margin-top: 4px;">Date: ${checkinDate}</div>
+    `;
+    window.history.replaceState({}, document.title, window.location.pathname);
+  } catch (err) {
+    console.error("Check-in error:", err);
+  }
+}
 
 // ==========================================
 // PUNISHMENTS & MAKEUP SYSTEM (TEACHER)
@@ -2017,7 +2106,7 @@ window.openAnalysisPage = function (assignmentId) {
 
   const logged = Object.entries(sub.mistakeCounts || {}).filter(([, v]) => v > 0);
   document.getElementById("ana-type-breakdown").innerHTML = logged.length > 0
-    ? logged.map(([type, count]) => `
+    ? logged.map(([type, count] ) => `
         <div style="display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);">
           <strong>${MISTAKE_LABELS[type] || type}</strong>
           <span class="badge badge-red">${count} mistake${count > 1 ? "s" : ""}</span>
