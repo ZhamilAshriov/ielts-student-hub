@@ -738,9 +738,9 @@ async function renderTeacherAttendanceManager() {
 
   const checkinUrl = `${window.location.origin}${window.location.pathname}?checkin=${today}`;
 
-  // Defensive check: prevents app crash if CDN script hasn't loaded
+  // Defensive check: prevents app crash if CDN script fails to load
   if (typeof QRCode === "undefined") {
-    console.error("QRCode library is not loaded. Please check your internet connection or script tag in index.html.");
+    console.error("QRCode library is not loaded. Please check your script tag in index.html.");
     const ctx = canvas.getContext("2d");
     if (ctx) {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -788,6 +788,11 @@ async function renderTeacherAttendanceManager() {
     `;
   }).join("");
 }
+
+const refreshAttBtn = document.getElementById("refresh-attendance-table-btn");
+const refreshQrBtn = document.getElementById("refresh-qr-btn");
+if (refreshAttBtn) refreshAttBtn.addEventListener("click", renderTeacherAttendanceManager);
+if (refreshQrBtn) refreshQrBtn.addEventListener("click", renderTeacherAttendanceManager);
 
 // ==========================================
 // PUNISHMENTS & MAKEUP SYSTEM (TEACHER)
