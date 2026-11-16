@@ -217,7 +217,6 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("teacher-nav").classList.remove("hidden");
     document.getElementById("student-nav").classList.add("hidden");
     document.getElementById("mock-date-input").value = getTodayStr();
-    document.getElementById("task-duedate").value = getTodayStr() + "T23:59";
     switchView("teacher-roster");
     loadTeacherData();
   } else {
