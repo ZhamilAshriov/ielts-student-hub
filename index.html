@@ -10,8 +10,6 @@
   <link rel="apple-touch-icon" href="./icon.png?v=5" />
   <meta name="theme-color" content="#1d4ed8" />
   <link rel="stylesheet" href="style.css" />
-  
-  <!-- Required libraries for Charts and QR Codes -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
 </head>
@@ -56,10 +54,10 @@
       <button class="nav-tab active" data-target="student-dashboard">Home</button>
       <button class="nav-tab" data-target="student-anki">Daily Anki <span id="nav-due-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-homework">Assignments <span id="nav-hw-badge" class="pill-badge">0</span></button>
+      <button class="nav-tab" data-target="student-tasks">Assigned Tasks <span id="nav-task-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="student-stats">Statistics & Progress</button>
       <button class="nav-tab" data-target="student-resources">Practice Resources</button>
       <button class="nav-tab" data-target="student-attendance">Attendance</button>
-      <button class="nav-tab" data-target="student-punishments">Punishments & Extras <span id="nav-punishment-badge" class="pill-badge">0</span></button>
     </nav>
 
     <!-- TEACHER NAVIGATION -->
@@ -69,7 +67,7 @@
       <button class="nav-tab" data-target="teacher-grading">Grading Queue <span id="nav-grade-badge" class="pill-badge">0</span></button>
       <button class="nav-tab" data-target="teacher-mocks">Enter Mock Scores</button>
       <button class="nav-tab" data-target="teacher-announcements">Announcements</button>
-      <button class="nav-tab" data-target="teacher-punishments">Assign Punishments</button>
+      <button class="nav-tab" data-target="teacher-tasks">Assign Tasks</button>
       <button class="nav-tab" data-target="teacher-attendance">Attendance Tracker</button>
     </nav>
 
@@ -293,47 +291,47 @@
         </div>
       </section>
 
-      <!-- 6. TEACHER QUICK ASSIGNMENT DISPATCHER -->
-      <section id="teacher-punishments" class="view-section hidden">
+      <!-- 6. TEACHER ASSIGN TASKS DISPATCHER -->
+      <section id="teacher-tasks" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
-            <h2>⚡ Quick Assignment Dispatcher</h2>
-            <p class="muted">Instantly assign drills or homework to a student or the entire Ambition Group class.</p>
-            <form id="assign-punishment-form">
+            <h2>⚡ Assign Tasks & Practice</h2>
+            <p class="muted">Instantly assign listening, reading, speaking, or custom tasks to a student or the entire Ambition Group class.</p>
+            <form id="assign-task-form">
               <div class="form-group">
-                <label for="pun-student-select">Target Student / Class</label>
-                <select id="pun-student-select" required>
+                <label for="task-student-select">Target Student / Class</label>
+                <select id="task-student-select" required>
                   <option value="">-- Choose Target --</option>
                   <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
                 </select>
               </div>
 
               <div class="form-group">
-                <label for="pun-skill-select">Skill Category</label>
-                <select id="pun-skill-select" required>
+                <label for="task-skill-select">Skill Category</label>
+                <select id="task-skill-select" required>
                   <option value="listening">🎧 Listening (Test Sets)</option>
                   <option value="reading">📖 Reading (Test Sets)</option>
                   <option value="speaking">🗣️ Speaking (Topic & Notes)</option>
-                  <option value="other">📝 Custom / Other Homework</option>
+                  <option value="other">📝 Custom / Other Task</option>
                 </select>
               </div>
 
-              <div id="pun-config-container"></div>
+              <div id="task-config-container"></div>
 
               <div class="form-group">
-                <label for="pun-duedate">Due Date & Time</label>
-                <input type="datetime-local" id="pun-duedate" required />
+                <label for="task-duedate">Due Date & Time</label>
+                <input type="datetime-local" id="task-duedate" required />
               </div>
 
-              <button type="submit" class="btn btn-primary btn-full" id="assign-pun-btn">Dispatch Assignment 🚀</button>
-              <p id="pun-assign-msg" class="status-msg"></p>
+              <button type="submit" class="btn btn-primary btn-full" id="assign-task-btn">Assign Task 🚀</button>
+              <p id="task-assign-msg" class="status-msg"></p>
             </form>
           </div>
 
           <div class="card">
             <div class="card-header-flex">
               <h2>Active Assigned Tasks</h2>
-              <button id="refresh-punishments-btn" class="btn btn-outline btn-sm">Refresh</button>
+              <button id="refresh-tasks-btn" class="btn btn-outline btn-sm">Refresh</button>
             </div>
             <div class="table-wrapper">
               <table>
@@ -346,7 +344,7 @@
                     <th>Action</th>
                   </tr>
                 </thead>
-                <tbody id="group-punishments-tbody">
+                <tbody id="group-tasks-tbody">
                   <tr><td colspan="5" class="muted center">Loading tasks...</td></tr>
                 </tbody>
               </table>
@@ -580,7 +578,31 @@
         </div>
       </section>
 
-      <!-- 4. DEDICATED STATISTICS, GROUP BENCHMARKS & FEEDBACK PAGE -->
+      <!-- 4. STUDENT ASSIGNED TASKS -->
+      <section id="student-tasks" class="view-section hidden">
+        <div class="card" style="margin-bottom:20px;">
+          <h2>Assigned Practice Tasks</h2>
+          <p class="muted" style="margin-bottom:0;">Extra assignments and practice drills given by your teacher. Complete these before the deadline.</p>
+        </div>
+        <div id="student-tasks-container" class="hw-grid">
+          <p class="muted center">Loading tasks...</p>
+        </div>
+
+        <!-- TASK RUNNER VIEW -->
+        <div id="task-runner-view" class="hidden" style="margin-top:20px;">
+          <div class="runner-topbar">
+            <button id="back-to-tasks-btn" class="btn btn-outline btn-sm">← Back to Assigned Tasks</button>
+            <h3 id="task-runner-title">Complete Task</h3>
+            <span id="task-runner-due" class="role-pill">Due</span>
+          </div>
+          <div class="grid-2col" style="margin-top:16px;">
+            <div class="card" id="task-runner-left"></div>
+            <div class="card" id="task-runner-right"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. DEDICATED STATISTICS, GROUP BENCHMARKS & FEEDBACK PAGE -->
       <section id="student-stats" class="view-section hidden">
         <!-- ROW 1: PERSONAL TRAJECTORY + ANONYMOUS GROUP BENCHMARK -->
         <div class="grid-2col" style="margin-bottom: 24px;">
@@ -670,7 +692,7 @@
         </div>
       </section>
 
-      <!-- 5. STUDENT PRACTICE RESOURCES -->
+      <!-- 6. STUDENT PRACTICE RESOURCES -->
       <section id="student-resources" class="view-section hidden">
         <div class="card">
           <div class="card-header-flex" style="flex-wrap:wrap;">
@@ -690,7 +712,7 @@
         </div>
       </section>
 
-      <!-- 6. STUDENT ATTENDANCE CHECK-IN -->
+      <!-- 7. STUDENT ATTENDANCE CHECK-IN -->
       <section id="student-attendance" class="view-section hidden">
         <div class="card center" style="padding: 40px 24px;">
           <div style="font-size: 48px; margin-bottom: 12px;">📸</div>
@@ -700,30 +722,6 @@
           </p>
           <div id="checkin-status-box" style="margin-bottom: 20px; font-weight: 600; font-size: 16px;">
             <span class="muted">Scan the classroom QR code to check in.</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- 7. STUDENT PUNISHMENTS & EXTRAS -->
-      <section id="student-punishments" class="view-section hidden">
-        <div class="card" style="margin-bottom:20px;">
-          <h2>Punishments & Makeup Assignments</h2>
-          <p class="muted" style="margin-bottom:0;">Extra practice assigned by your teacher for late submissions or missed deadlines. Complete these promptly to clear your record.</p>
-        </div>
-        <div id="student-punishments-container" class="hw-grid">
-          <p class="muted center">Loading punishments...</p>
-        </div>
-
-        <!-- PUNISHMENT SUBMISSION RUNNER -->
-        <div id="punishment-runner-view" class="hidden" style="margin-top:20px;">
-          <div class="runner-topbar">
-            <button id="back-to-punishments-btn" class="btn btn-outline btn-sm">← Back to Punishments</button>
-            <h3 id="punishment-runner-title">Complete Punishment</h3>
-            <span id="punishment-runner-due" class="role-pill">Due</span>
-          </div>
-          <div class="grid-2col" style="margin-top:16px;">
-            <div class="card" id="pun-runner-left"></div>
-            <div class="card" id="pun-runner-right"></div>
           </div>
         </div>
       </section>
