@@ -328,7 +328,6 @@ createStudentForm.addEventListener("submit", async (e) => {
   }
 });
 
-// Teacher Announcements Form & List
 const announcementForm = document.getElementById("announcement-form");
 if (announcementForm) {
   announcementForm.addEventListener("submit", async (e) => {
@@ -1684,8 +1683,7 @@ window.startAssignment = function (assignmentId) {
 
     document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
   }
-}; 
-// End of window.startAssignment
+};
 
 async function submitScreenshotHomework(hw) {
   const isDrill = Boolean(hw.isDrill);
@@ -1849,7 +1847,7 @@ window.openAnalysisPage = function (assignmentId) {
 
 async function submitWritingHomework(hw) {
   const text = document.getElementById("writing-essay-input").value.trim();
-  const chartFile = document.getElementById("writing-chart-file").files[0];
+  const chartFile = document.getElementById("writing-chart-file")?.files[0];
 
   if (!text) return alert("Please write your essay or report before submitting.");
   if (hw.id === "HW-05" && !chartFile) {
@@ -1903,7 +1901,7 @@ async function submitWritingHomework(hw) {
   }
 }
 
-async function startBrowserRecording() {
+window.startBrowserRecording = async function () {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     recordedChunks = [];
@@ -1937,9 +1935,9 @@ async function startBrowserRecording() {
   } catch (err) {
     alert("Microphone access denied. Please allow microphone permissions in your browser.");
   }
-}
+};
 
-function stopBrowserRecording() {
+window.stopBrowserRecording = function () {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
     mediaRecorder.stop();
   }
@@ -1948,14 +1946,14 @@ function stopBrowserRecording() {
   document.getElementById("btn-stop-rec").classList.add("hidden");
   document.getElementById("btn-start-rec").textContent = "↻ Re-record";
   document.getElementById("btn-start-rec").classList.remove("hidden");
-}
+};
 
 function stopActiveRecordingCleanup() {
   if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
   clearInterval(recInterval);
 }
 
-async function submitSpeakingHomework(hw) {
+window.submitSpeakingHomework = async function (hw) {
   if (!recordedAudioBlob) return alert("Please record your speaking answer first.");
 
   const btn = document.getElementById("submit-speaking-btn");
@@ -1995,7 +1993,7 @@ async function submitSpeakingHomework(hw) {
     btn.disabled = false;
     btn.textContent = "Upload & Submit Recording";
   }
-}
+};
 
 async function submitGrammarHomework(hw) {
   const file = document.getElementById("gram-file").files[0];
