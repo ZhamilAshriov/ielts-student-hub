@@ -1165,6 +1165,21 @@ function updateDashboardUI() {
 }
 
 // ==========================================
+// DYNAMIC RUNNER & DISPATCHING (SHARED)
+// ==========================================
+function getDynamicRunnerHTML(task, type) {
+  // ... compressed code ...
+}
+
+window.startCustomHwRunner = async function (taskId) {
+  // ... compressed code ...
+};
+
+window.startPunishmentRunner = async function (taskId) {
+  // ... compressed code ...
+};
+
+// ==========================================
 // STUDENT ASSIGNMENTS WORKFLOW (UNIFIED ALL)
 // ==========================================
 function showHomeworkListView() {
