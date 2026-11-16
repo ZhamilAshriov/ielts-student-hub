@@ -28,18 +28,4 @@ export const ASSIGNMENTS = [
     dueDate: "2026-11-21T12:00",
     instructions: "Complete Sections 7–12 from the grammar book. Upload clear photos/screenshots of your completed exercises."
   },
-  {
-    id: "HW-04",
-    week: "Week 1 (Nov 15–21)",
-    title: "Writing Task 1: Line Graph Report & Analysis",
-    skill: "writing",
-    dueDate: "2026-11-21T12:00",
-    minWords: 150,
-    promptText: `Select any IELTS Academic Writing Task 1 Line Graph, write a full analytical report (minimum 150 words), and submit it below.
-
-Make sure to include:
-• Paraphrased introduction (what the graph shows, time period, units)
-• Clear overview paragraph highlighting the main upward/downward trends
-• Detailed body paragraphs comparing key figures and turning points`
-  }
 ];
