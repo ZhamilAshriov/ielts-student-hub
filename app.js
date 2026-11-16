@@ -63,6 +63,7 @@ let studentMocksList = [];
 let allGroupUsers = [];
 let allGroupMocks = [];
 let cachedAnnouncements = [];
+let cachedStudentTasks = [];
 
 // Chart Instances
 let studentChartInstance = null;
@@ -239,8 +240,6 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
 
     if (tab.dataset.target === "student-homework") {
       showHomeworkListView();
-    } else if (tab.dataset.target === "student-tasks") {
-      renderStudentTasksList();
     } else if (tab.dataset.target === "student-stats") {
       renderStatisticsPage();
     } else if (tab.dataset.target === "teacher-attendance") {
@@ -1198,12 +1197,13 @@ function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(
 // STUDENT: INITIALIZATION & ANKI ENGINE
 // ==========================================
 async function initStudentData() {
-  const [usersSnap, progSnap, subsSnap, mocksSnap, annSnap] = await Promise.all([
+  const [usersSnap, progSnap, subsSnap, mocksSnap, annSnap, tasksSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", currentStudentId))),
     getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
     getDocs(collection(db, "mockScores")),
-    getDocs(collection(db, "announcements"))
+    getDocs(collection(db, "announcements")),
+    getDocs(query(collection(db, "punishments"), where("studentId", "==", currentStudentId)))
   ]);
 
   allGroupUsers = [];
@@ -1233,6 +1233,9 @@ async function initStudentData() {
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
   cachedAnnouncements = sortAnnouncementsList(rawAnns);
 
+  cachedStudentTasks = [];
+  tasksSnap.forEach((d) => cachedStudentTasks.push(d.data()));
+
   bonusMode = false;
   selectedDeckId = "all";
   buildAnkiQueue();
@@ -1240,7 +1243,6 @@ async function initStudentData() {
   renderStudentAnnouncements(cachedAnnouncements);
   renderAssignmentsList();
   renderResourcesList("all");
-  renderStudentTasksList();
 }
 
 function renderStudentAnnouncements(list) {
@@ -1381,7 +1383,9 @@ function updateDashboardUI() {
   if (stats.lastReviewedDate && stats.lastReviewedDate < yesterday) activeStreak = 0;
   const todayCount = stats.lastReviewedDate === today ? (stats.todayCount || 0) : 0;
 
-  const pendingHw = ASSIGNMENTS.filter((a) => !studentSubmissionsMap[a.id]).length;
+  const pendingStatic = ASSIGNMENTS.filter((a) => !studentSubmissionsMap[a.id]).length;
+  const pendingDynamic = cachedStudentTasks.filter((t) => t.status !== "verified" && t.status !== "submitted").length;
+  const pendingHw = pendingStatic + pendingDynamic;
 
   document.getElementById("nav-due-badge").textContent = totalDue;
   document.getElementById("nav-hw-badge").textContent = pendingHw;
@@ -1659,18 +1663,26 @@ document.getElementById("practice-all-btn").addEventListener("click", () => {
 });
 
 // ==========================================
-// STUDENT: HOMEWORK SYSTEM
+// STUDENT: HOMEWORK SYSTEM (MERGED)
 // ==========================================
 function showHomeworkListView() {
   stopActiveRecordingCleanup();
   document.getElementById("hw-list-view").classList.remove("hidden");
   document.getElementById("hw-runner-view").classList.add("hidden");
   document.getElementById("hw-analysis-view").classList.add("hidden");
+  document.getElementById("task-runner-view").classList.add("hidden");
   renderAssignmentsList();
 }
 
 document.getElementById("back-to-hw-btn").addEventListener("click", showHomeworkListView);
 document.getElementById("back-from-analysis-btn").addEventListener("click", showHomeworkListView);
+const backTaskBtn = document.getElementById("back-to-tasks-btn");
+if (backTaskBtn) {
+  backTaskBtn.addEventListener("click", () => {
+    document.getElementById("task-runner-view").classList.add("hidden");
+    showHomeworkListView();
+  });
+}
 
 let hwViewFilter = "todo";
 
@@ -1678,8 +1690,30 @@ function renderAssignmentsList() {
   const container = document.getElementById("assignments-list-container");
   const now = new Date();
 
-  const todoList = ASSIGNMENTS.filter((hw) => !studentSubmissionsMap[hw.id]);
-  const doneList = ASSIGNMENTS.filter((hw) => !!studentSubmissionsMap[hw.id]);
+  const todoList = [];
+  const doneList = [];
+
+  ASSIGNMENTS.forEach((hw) => {
+    if (studentSubmissionsMap[hw.id]) doneList.push(hw);
+    else todoList.push(hw);
+  });
+
+  cachedStudentTasks.forEach((t) => {
+    const hwFormat = {
+      id: t.id,
+      title: t.reason,
+      skill: t.skill,
+      dueDate: t.dueDate,
+      isDynamic: true,
+      status: t.status,
+      details: t.details
+    };
+    if (t.status === "verified" || t.status === "submitted") {
+      doneList.push(hwFormat);
+    } else {
+      todoList.push(hwFormat);
+    }
+  });
 
   const filterControls = `
     <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px;">
@@ -1704,64 +1738,100 @@ function renderAssignmentsList() {
 
   const grouped = {};
   activeList.forEach((hw) => {
-    const wk = hw.week || "Current Assignments";
+    const wk = hw.isDynamic ? "Assigned Practice Tasks" : (hw.week || "Current Assignments");
     if (!grouped[wk]) grouped[wk] = [];
     grouped[wk].push(hw);
   });
 
   const groupsHtml = Object.entries(grouped).map(([weekTitle, items]) => {
     const cardsHtml = items.map((hw) => {
-      const sub = studentSubmissionsMap[hw.id];
-      const isPastDue = now > new Date(hw.dueDate);
-
       let statusBadge = "";
       let actionBtn = "";
       let feedbackHtml = "";
 
-      if (sub) {
-        if (sub.status === "graded") {
-          statusBadge = sub.bandScore
-            ? `<span class="badge badge-green">Verified: Band ${sub.bandScore}</span>`
-            : `<span class="badge badge-green">Checked by Teacher</span>`;
-        } else if (sub.isLate) {
-          statusBadge = `<span class="badge badge-red">Submitted Late${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
-        } else {
-          statusBadge = `<span class="badge badge-blue">Submitted${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
-        }
+      if (hw.isDynamic) {
+        let detailStr = "";
+        if (hw.skill === "listening" || hw.skill === "reading") detailStr = `${hw.details.testCount} test set(s)`;
+        else if (hw.skill === "speaking") detailStr = hw.details.notes || "Speaking practice";
+        else if (hw.skill === "other") detailStr = "Custom task";
 
-        if (sub.teacherFeedback) {
-          feedbackHtml = `<div class="feedback-callout"><strong>Teacher Feedback:</strong> ${escapeHtml(sub.teacherFeedback)}</div>`;
-        }
-
-        if (hw.skill === "reading" || hw.skill === "listening") {
-          actionBtn = `<button class="btn btn-outline btn-sm" onclick="window.openAnalysisPage('${hw.id}')">View Receipt</button>`;
-        } else {
+        if (hw.status === "verified") {
+          statusBadge = `<span class="badge badge-green">Verified</span>`;
+          actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Completed</span>`;
+        } else if (hw.status === "submitted") {
+          statusBadge = `<span class="badge badge-blue">Submitted</span>`;
           actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
+        } else {
+          const isPastDue = now > new Date(hw.dueDate);
+          statusBadge = isPastDue ? `<span class="badge badge-gray">Missing (Past Due)</span>` : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
+          actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startTaskRunner('${hw.id}')">Submit Task</button>`;
         }
-      } else {
-        statusBadge = isPastDue
-          ? `<span class="badge badge-gray">Missing (Past Due)</span>`
-          : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
 
-        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Homework</button>`;
-      }
-
-      return `
-        <div class="hw-item">
-          <div style="flex:1;min-width:240px;">
-            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-              <span class="role-pill">${hw.skill.toUpperCase()}</span>
-              <strong>${hw.title}</strong>
+        return `
+          <div class="hw-item">
+            <div style="flex:1;min-width:240px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span class="role-pill">${hw.skill.toUpperCase()}</span>
+                <strong>${escapeHtml(hw.title)}</strong>
+              </div>
+              <div style="font-size:13px;color:var(--text);margin-top:4px;">Instructions: ${escapeHtml(detailStr)}</div>
+              <div class="hw-meta" style="margin-top:6px;">
+                <span>Deadline: ${formatDueDate(hw.dueDate)}</span>
+                ${statusBadge}
+              </div>
             </div>
-            <div class="hw-meta">
-              <span>Deadline: ${formatDueDate(hw.dueDate)}</span>
-              ${statusBadge}
-            </div>
-            ${feedbackHtml}
+            <div>${actionBtn}</div>
           </div>
-          <div>${actionBtn}</div>
-        </div>
-      `;
+        `;
+      } else {
+        const sub = studentSubmissionsMap[hw.id];
+        const isPastDue = now > new Date(hw.dueDate);
+
+        if (sub) {
+          if (sub.status === "graded") {
+            statusBadge = sub.bandScore
+              ? `<span class="badge badge-green">Verified: Band ${sub.bandScore}</span>`
+              : `<span class="badge badge-green">Checked by Teacher</span>`;
+          } else if (sub.isLate) {
+            statusBadge = `<span class="badge badge-red">Submitted Late${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+          } else {
+            statusBadge = `<span class="badge badge-blue">Submitted${sub.bandScore ? ` • Band ${sub.bandScore}` : ""}</span>`;
+          }
+
+          if (sub.teacherFeedback) {
+            feedbackHtml = `<div class="feedback-callout"><strong>Teacher Feedback:</strong> ${escapeHtml(sub.teacherFeedback)}</div>`;
+          }
+
+          if (hw.skill === "reading" || hw.skill === "listening") {
+            actionBtn = `<button class="btn btn-outline btn-sm" onclick="window.openAnalysisPage('${hw.id}')">View Receipt</button>`;
+          } else {
+            actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
+          }
+        } else {
+          statusBadge = isPastDue
+            ? `<span class="badge badge-gray">Missing (Past Due)</span>`
+            : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
+
+          actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Homework</button>`;
+        }
+
+        return `
+          <div class="hw-item">
+            <div style="flex:1;min-width:240px;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span class="role-pill">${hw.skill.toUpperCase()}</span>
+                <strong>${hw.title}</strong>
+              </div>
+              <div class="hw-meta">
+                <span>Deadline: ${formatDueDate(hw.dueDate)}</span>
+                ${statusBadge}
+              </div>
+              ${feedbackHtml}
+            </div>
+            <div>${actionBtn}</div>
+          </div>
+        `;
+      }
     }).join("");
 
     return `
@@ -1789,6 +1859,7 @@ window.startAssignment = function (assignmentId) {
 
   document.getElementById("hw-list-view").classList.add("hidden");
   document.getElementById("hw-analysis-view").classList.add("hidden");
+  document.getElementById("task-runner-view").classList.add("hidden");
   document.getElementById("hw-runner-view").classList.remove("hidden");
 
   document.getElementById("runner-title").textContent = hw.title;
@@ -1974,6 +2045,146 @@ window.startAssignment = function (assignmentId) {
 
     document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
   }
+};
+
+let activeTask = null;
+
+window.startTaskRunner = async function (taskId) {
+  const snap = await getDoc(doc(db, "punishments", taskId));
+  if (!snap.exists()) return;
+  activeTask = snap.data();
+
+  document.getElementById("hw-list-view").classList.add("hidden");
+  document.getElementById("hw-runner-view").classList.add("hidden");
+  document.getElementById("hw-analysis-view").classList.add("hidden");
+  document.getElementById("task-runner-view").classList.remove("hidden");
+
+  document.getElementById("task-runner-title").textContent = activeTask.reason;
+  document.getElementById("task-runner-due").textContent = `Due: ${formatDueDate(activeTask.dueDate)}`;
+
+  const leftPane = document.getElementById("task-runner-left");
+  const rightPane = document.getElementById("task-runner-right");
+
+  if (leftPane) {
+    leftPane.innerHTML = `
+      <h3>Task Instructions</h3>
+      <p class="passage-box">Complete your assigned ${activeTask.skill.toUpperCase()} task and submit your work or screenshot below.</p>
+    `;
+  }
+
+  if (rightPane) {
+    if (activeTask.skill === "listening" || activeTask.skill === "reading") {
+      rightPane.innerHTML = `
+        <h3>Submit Score & Screenshot</h3>
+        <div class="form-group">
+          <label for="task-lr-score">Correct Answers / Score Summary</label>
+          <input type="text" id="task-lr-score" placeholder="e.g., 34 / 40" required />
+        </div>
+        <div class="form-group">
+          <label for="task-lr-file">Result Screenshot (PNG / JPG)</label>
+          <input type="file" id="task-lr-file" accept="image/*" required />
+        </div>
+        <button class="btn btn-primary btn-full" id="submit-task-lr-btn">Submit Task Proof</button>
+      `;
+      document.getElementById("submit-task-lr-btn").addEventListener("click", submitTaskScreenshot);
+    } else if (activeTask.skill === "speaking") {
+      rightPane.innerHTML = `
+        <h3>Record Speaking Answer</h3>
+        <div style="text-align:center;padding:24px 0;">
+          <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
+          <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
+          <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+            <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
+            <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+          </div>
+          <div id="rec-preview-area" class="hidden" style="margin-top:16px;">
+            <audio id="rec-audio-preview" controls style="width:100%;"></audio>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="submitTaskAudio()">Upload & Submit Speaking</button>
+      `;
+    } else {
+      rightPane.innerHTML = `
+        <h3>Submit Task Response</h3>
+        <div class="form-group">
+          <label for="task-response-input">Type your answer or notes here</label>
+          <textarea id="task-response-input" rows="8" placeholder="Type response..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="submitTaskCustom()">Submit Task</button>
+      `;
+    }
+  }
+};
+
+async function submitTaskScreenshot() {
+  const fileInput = document.getElementById("task-lr-file");
+  const file = fileInput.files[0];
+  const scoreText = document.getElementById("task-lr-score").value.trim();
+  if (!file || !scoreText) return alert("Please enter your score and attach a screenshot.");
+
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Upload failed.");
+
+  await updateDoc(doc(db, "punishments", activeTask.id), {
+    status: "submitted",
+    submission: { scoreText, screenshotUrl: data.secure_url },
+    submittedAt: serverTimestamp()
+  });
+
+  const idx = cachedStudentTasks.findIndex(t => t.id === activeTask.id);
+  if (idx !== -1) cachedStudentTasks[idx].status = "submitted";
+
+  updateDashboardUI();
+  alert("Task submitted successfully!");
+  showHomeworkListView();
+}
+
+async function submitTaskCustom() {
+  const text = document.getElementById("task-response-input").value.trim();
+  if (!text) return alert("Please enter your response.");
+
+  await updateDoc(doc(db, "punishments", activeTask.id), {
+    status: "submitted",
+    submission: { responseText: text },
+    submittedAt: serverTimestamp()
+  });
+
+  const idx = cachedStudentTasks.findIndex(t => t.id === activeTask.id);
+  if (idx !== -1) cachedStudentTasks[idx].status = "submitted";
+
+  updateDashboardUI();
+  alert("Task submitted successfully!");
+  showHomeworkListView();
+}
+
+window.submitTaskAudio = async function () {
+  if (!recordedAudioBlob) return alert("Please record your audio first.");
+
+  const formData = new FormData();
+  formData.append("file", recordedAudioBlob, `task_${activeTask.id}.webm`);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Audio upload failed.");
+
+  await updateDoc(doc(db, "punishments", activeTask.id), {
+    status: "submitted",
+    submission: { audioUrl: data.secure_url },
+    submittedAt: serverTimestamp()
+  });
+
+  const idx = cachedStudentTasks.findIndex(t => t.id === activeTask.id);
+  if (idx !== -1) cachedStudentTasks[idx].status = "submitted";
+
+  updateDashboardUI();
+  alert("Speaking task submitted!");
+  showHomeworkListView();
 };
 
 async function submitScreenshotHomework(hw) {
@@ -2342,199 +2553,6 @@ async function submitGrammarHomework(hw) {
     btn.textContent = "Upload & Submit Grammar Homework";
   }
 }
-
-// ==========================================
-// STUDENT ASSIGNED TASKS WORKFLOW
-// ==========================================
-async function renderStudentTasksList() {
-  const container = document.getElementById("student-tasks-container");
-  if (!container) return;
-
-  const q = query(collection(db, "punishments"), where("studentId", "==", currentStudentId));
-  const snap = await getDocs(q);
-  const myTasks = [];
-  snap.forEach((d) => myTasks.push(d.data()));
-
-  const pendingCount = myTasks.filter((t) => t.status !== "verified").length;
-  const badgeEl = document.getElementById("nav-task-badge");
-  if (badgeEl) badgeEl.textContent = pendingCount;
-
-  if (myTasks.length === 0) {
-    container.innerHTML = `<p class="muted center" style="padding:32px 0;">🎉 You have no active assigned tasks!</p>`;
-    return;
-  }
-
-  container.innerHTML = myTasks.map((t) => {
-    let detailStr = "";
-    if (t.skill === "listening" || t.skill === "reading") detailStr = `${t.details.testCount} test set(s)`;
-    else if (t.skill === "speaking") detailStr = t.details.notes || "Speaking practice";
-    else if (t.skill === "other") detailStr = "Custom task";
-
-    const statusBadge = t.status === "verified" ? `<span class="badge badge-green">Completed & Verified</span>`
-      : t.status === "submitted" ? `<span class="badge badge-blue">Submitted (Pending Review)</span>`
-      : `<span class="badge badge-red">Pending Due ${formatDueDate(t.dueDate)}</span>`;
-
-    const actionBtn = t.status === "verified"
-      ? `<span class="muted" style="font-size:13px;">Completed</span>`
-      : `<button class="btn btn-primary btn-sm" onclick="window.startTaskRunner('${t.id}')">Complete & Submit</button>`;
-
-    return `
-      <div class="hw-item">
-        <div style="flex:1;">
-          <span class="role-pill">${t.skill.toUpperCase()}</span>
-          <strong>${escapeHtml(t.reason)}</strong>
-          <div style="font-size:13px;color:var(--text);margin-top:4px;">Instructions: ${escapeHtml(detailStr)}</div>
-          <div class="hw-meta" style="margin-top:6px;"><span>Deadline: ${formatDueDate(t.dueDate)}</span>${statusBadge}</div>
-        </div>
-        <div>${actionBtn}</div>
-      </div>
-    `;
-  }).join("");
-}
-
-let activeTask = null;
-
-window.startTaskRunner = async function (taskId) {
-  const snap = await getDoc(doc(db, "punishments", taskId));
-  if (!snap.exists()) return;
-  activeTask = snap.data();
-
-  const containerCard = document.getElementById("student-tasks-container")?.parentElement?.querySelector(".card");
-  if (containerCard) containerCard.classList.add("hidden");
-  const cont = document.getElementById("student-tasks-container");
-  if (cont) cont.classList.add("hidden");
-  const runnerView = document.getElementById("task-runner-view");
-  if (runnerView) runnerView.classList.remove("hidden");
-
-  const titleEl = document.getElementById("task-runner-title");
-  if (titleEl) titleEl.textContent = activeTask.reason;
-  const dueEl = document.getElementById("task-runner-due");
-  if (dueEl) dueEl.textContent = `Due: ${formatDueDate(activeTask.dueDate)}`;
-
-  const leftPane = document.getElementById("task-runner-left");
-  const rightPane = document.getElementById("task-runner-right");
-
-  if (leftPane) {
-    leftPane.innerHTML = `
-      <h3>Task Instructions</h3>
-      <p class="passage-box">Complete your assigned ${activeTask.skill.toUpperCase()} task and submit your work or screenshot below.</p>
-    `;
-  }
-
-  if (rightPane) {
-    if (activeTask.skill === "listening" || activeTask.skill === "reading") {
-      rightPane.innerHTML = `
-        <h3>Submit Score & Screenshot</h3>
-        <div class="form-group">
-          <label for="task-lr-score">Correct Answers / Score Summary</label>
-          <input type="text" id="task-lr-score" placeholder="e.g., 34 / 40" required />
-        </div>
-        <div class="form-group">
-          <label for="task-lr-file">Result Screenshot (PNG / JPG)</label>
-          <input type="file" id="task-lr-file" accept="image/*" required />
-        </div>
-        <button class="btn btn-primary btn-full" id="submit-task-lr-btn">Submit Task Proof</button>
-      `;
-      document.getElementById("submit-task-lr-btn").addEventListener("click", submitTaskScreenshot);
-    } else if (activeTask.skill === "speaking") {
-      rightPane.innerHTML = `
-        <h3>Record Speaking Answer</h3>
-        <div style="text-align:center;padding:24px 0;">
-          <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
-          <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
-          <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
-            <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
-            <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
-          </div>
-          <div id="rec-preview-area" class="hidden" style="margin-top:16px;">
-            <audio id="rec-audio-preview" controls style="width:100%;"></audio>
-          </div>
-        </div>
-        <button class="btn btn-primary btn-full" onclick="submitTaskAudio()">Upload & Submit Speaking</button>
-      `;
-    } else {
-      rightPane.innerHTML = `
-        <h3>Submit Task Response</h3>
-        <div class="form-group">
-          <label for="task-response-input">Type your answer or notes here</label>
-          <textarea id="task-response-input" rows="8" placeholder="Type response..." style="width:100%;padding:10px;border:1px solid var(--border);border-radius:8px;"></textarea>
-        </div>
-        <button class="btn btn-primary btn-full" onclick="submitTaskCustom()">Submit Task</button>
-      `;
-    }
-  }
-};
-
-const backTaskBtn = document.getElementById("back-to-tasks-btn");
-if (backTaskBtn) {
-  backTaskBtn.addEventListener("click", () => {
-    document.getElementById("task-runner-view").classList.add("hidden");
-    const containerCard = document.getElementById("student-tasks-container")?.parentElement?.querySelector(".card");
-    if (containerCard) containerCard.classList.remove("hidden");
-    const cont = document.getElementById("student-tasks-container");
-    if (cont) cont.classList.remove("hidden");
-    renderStudentTasksList();
-  });
-}
-
-async function submitTaskScreenshot() {
-  const fileInput = document.getElementById("task-lr-file");
-  const file = fileInput.files[0];
-  const scoreText = document.getElementById("task-lr-score").value.trim();
-  if (!file || !scoreText) return alert("Please enter your score and attach a screenshot.");
-
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-  const data = await res.json();
-  if (!data.secure_url) return alert("Upload failed.");
-
-  await updateDoc(doc(db, "punishments", activeTask.id), {
-    status: "submitted",
-    submission: { scoreText, screenshotUrl: data.secure_url },
-    submittedAt: serverTimestamp()
-  });
-
-  alert("Task submitted successfully!");
-  document.getElementById("back-to-tasks-btn").click();
-}
-
-async function submitTaskCustom() {
-  const text = document.getElementById("task-response-input").value.trim();
-  if (!text) return alert("Please enter your response.");
-
-  await updateDoc(doc(db, "punishments", activeTask.id), {
-    status: "submitted",
-    submission: { responseText: text },
-    submittedAt: serverTimestamp()
-  });
-
-  alert("Task submitted successfully!");
-  document.getElementById("back-to-tasks-btn").click();
-}
-
-window.submitTaskAudio = async function () {
-  if (!recordedAudioBlob) return alert("Please record your audio first.");
-
-  const formData = new FormData();
-  formData.append("file", recordedAudioBlob, `task_${activeTask.id}.webm`);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
-  const data = await res.json();
-  if (!data.secure_url) return alert("Audio upload failed.");
-
-  await updateDoc(doc(db, "punishments", activeTask.id), {
-    status: "submitted",
-    submission: { audioUrl: data.secure_url },
-    submittedAt: serverTimestamp()
-  });
-
-  alert("Speaking task submitted!");
-  document.getElementById("back-to-tasks-btn").click();
-};
 
 // ==========================================
 // STUDENT: CURATED PRACTICE RESOURCES
