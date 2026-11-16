@@ -4,7 +4,7 @@
 export const ASSIGNMENTS = [
   {
     id: "HW-01",
-    week: "Week 1 (Nov 15–21)",
+    week: "Week (Nov 15–21)",
     title: "Grammar Book: Sections 1–6 & 53–58 (Review)",
     skill: "grammar",
     dueDate: "2026-11-21T12:00",
@@ -12,7 +12,7 @@ export const ASSIGNMENTS = [
   },
   {
     id: "HW-02",
-    week: "Week 1 (Nov 15–21)",
+    week: "Week (Nov 15–21)",
     title: "Reading Drill: 30 TFNG + 30 YNNG Passages",
     skill: "reading",
     isDrill: true,
@@ -22,7 +22,7 @@ export const ASSIGNMENTS = [
   },
   {
     id: "HW-03",
-    week: "Week 1 (Nov 15–21)",
+    week: "Week (Nov 15–21)",
     title: "Grammar Book: Sections 7–12",
     skill: "grammar",
     dueDate: "2026-11-21T12:00",
