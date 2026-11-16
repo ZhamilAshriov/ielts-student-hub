@@ -734,9 +734,22 @@ async function renderTeacherAttendanceManager() {
   if (!canvas) return;
 
   const today = getTodayStr();
-  dateLabel.textContent = `Lesson Date: ${today}`;
+  if (dateLabel) dateLabel.textContent = `Lesson Date: ${today}`;
 
   const checkinUrl = `${window.location.origin}${window.location.pathname}?checkin=${today}`;
+
+  // Defensive check: prevents app crash if CDN script hasn't loaded
+  if (typeof QRCode === "undefined") {
+    console.error("QRCode library is not loaded. Please check your internet connection or script tag in index.html.");
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.font = "12px sans-serif";
+      ctx.fillStyle = "#dc2626";
+      ctx.fillText("QR Library Not Loaded", 15, 100);
+    }
+    return;
+  }
 
   QRCode.toCanvas(canvas, checkinUrl, { width: 200, margin: 2, color: { dark: "#0f172a", light: "#ffffff" } }, (error) => {
     if (error) console.error("QR Generation error:", error);
@@ -747,6 +760,8 @@ async function renderTeacherAttendanceManager() {
   attSnap.forEach((d) => { attendedMap[d.data().studentId] = d.data(); });
 
   const tbody = document.getElementById("teacher-attendance-tbody");
+  if (!tbody) return;
+
   if (cachedStudents.length === 0) {
     tbody.innerHTML = `<tr><td colspan="4" class="muted center">No students in roster.</td></tr>`;
     return;
@@ -772,42 +787,6 @@ async function renderTeacherAttendanceManager() {
       </tr>
     `;
   }).join("");
-}
-
-const refreshAttBtn = document.getElementById("refresh-attendance-table-btn");
-const refreshQrBtn = document.getElementById("refresh-qr-btn");
-if (refreshAttBtn) refreshAttBtn.addEventListener("click", renderTeacherAttendanceManager);
-if (refreshQrBtn) refreshQrBtn.addEventListener("click", renderTeacherAttendanceManager);
-
-async function handleUrlCheckInToken() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const checkinDate = urlParams.get("checkin");
-  if (!checkinDate || !currentStudentId) return;
-
-  try {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes();
-    const totalMinutes = hours * 60 + minutes;
-    const cutoffMinutes = 9 * 60 + 15; // 9:15 AM cutoff example
-    const status = totalMinutes <= cutoffMinutes ? "Present" : "Late";
-
-    const docId = `${checkinDate}_${currentStudentId}`;
-    await setDoc(doc(db, "attendance", docId), {
-      studentId: currentStudentId,
-      date: checkinDate,
-      status,
-      checkedInAt: serverTimestamp()
-    }, { merge: true });
-
-    document.getElementById("checkin-status-box").innerHTML = `
-      <span style="color: var(--success); font-size: 18px;">✅ Attendance Logged as "${status}"!</span>
-      <div class="muted" style="font-size: 13px; margin-top: 4px;">Date: ${checkinDate}</div>
-    `;
-    window.history.replaceState({}, document.title, window.location.pathname);
-  } catch (err) {
-    console.error("Check-in error:", err);
-  }
 }
 
 // ==========================================
