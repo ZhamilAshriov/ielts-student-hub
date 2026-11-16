@@ -75,7 +75,6 @@
     <!-- MAIN CONTENT AREA -->
     <main class="container">
       <!-- ==================== TEACHER VIEWS ==================== -->
-      <!-- 1. ROSTER & CREATE STUDENT -->
       <section id="teacher-roster" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
@@ -123,7 +122,6 @@
           </div>
         </div>
 
-        <!-- TEACHER STUDENT INSPECTOR PANEL -->
         <div id="teacher-inspector-card" class="card hidden" style="margin-top: 24px;">
           <div class="card-header-flex">
             <div>
@@ -148,7 +146,6 @@
         </div>
       </section>
 
-      <!-- 2. TEACHER HOMEWORK MATRIX -->
       <section id="teacher-hw-tracker" class="view-section hidden">
         <div class="card">
           <div class="card-header-flex">
@@ -164,7 +161,6 @@
         </div>
       </section>
 
-      <!-- 3. TEACHER GRADING QUEUE -->
       <section id="teacher-grading" class="view-section hidden">
         <div class="card">
           <div class="card-header-flex">
@@ -180,7 +176,6 @@
         </div>
       </section>
 
-      <!-- 4. TEACHER ENTER MOCK SCORES -->
       <section id="teacher-mocks" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
@@ -247,7 +242,6 @@
         </div>
       </section>
 
-      <!-- 5. TEACHER ANNOUNCEMENTS -->
       <section id="teacher-announcements" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
@@ -292,12 +286,12 @@
         </div>
       </section>
 
-      <!-- 6. TEACHER ASSIGN HOMEWORK -->
+      <!-- 6. TEACHER AUTOMATED HOMEWORK BUILDER -->
       <section id="teacher-homework-builder" class="view-section hidden">
         <div class="grid-2col">
           <div class="card">
             <h2>📝 Assign Homework</h2>
-            <p class="muted">Instantly assign listening, reading, speaking, or custom tasks to the Assignments tab.</p>
+            <p class="muted">Instantly assign listening, reading, speaking, grammar, or custom tasks to the Assignments tab.</p>
             <form id="assign-hw-form">
               <div class="form-group">
                 <label for="hw-target-select">Target Student / Class</label>
@@ -312,7 +306,9 @@
                 <select id="hw-skill-select" required>
                   <option value="listening">🎧 Listening (Test Sets)</option>
                   <option value="reading">📖 Reading (Test Sets)</option>
-                  <option value="speaking">🗣️ Speaking (Topic & Notes)</option>
+                  <option value="writing">✍️ Writing (Essay / Report)</option>
+                  <option value="speaking">🗣️ Speaking (Questions & Topics)</option>
+                  <option value="grammar">📘 Grammar (Workbook Practice)</option>
                   <option value="other">📝 Custom / Other Task</option>
                 </select>
               </div>
@@ -358,7 +354,7 @@
         <div class="grid-2col">
           <div class="card">
             <h2>⚡ Assign Punishment & Extras</h2>
-            <p class="muted">Assign remedial drills and extra practice directly to a student's Punishments tab.</p>
+            <p class="muted">Assign automated remedial tasks directly to a student's Punishments tab.</p>
             <form id="assign-pun-form">
               <div class="form-group">
                 <label for="pun-target-select">Target Student / Class</label>
@@ -373,7 +369,9 @@
                 <select id="pun-skill-select" required>
                   <option value="listening">🎧 Listening (Test Sets)</option>
                   <option value="reading">📖 Reading (Test Sets)</option>
-                  <option value="speaking">🗣️ Speaking (Topic & Notes)</option>
+                  <option value="writing">✍️ Writing (Essay / Report)</option>
+                  <option value="speaking">🗣️ Speaking (Questions & Topics)</option>
+                  <option value="grammar">📘 Grammar (Workbook Practice)</option>
                   <option value="other">📝 Custom / Other Task</option>
                 </select>
               </div>
@@ -452,7 +450,6 @@
       </section>
 
       <!-- ==================== STUDENT VIEWS ==================== -->
-      <!-- 1. STUDENT HOME -->
       <section id="student-dashboard" class="view-section hidden">
         <div class="card" style="margin-bottom: 20px;">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -500,7 +497,6 @@
         </div>
       </section>
 
-      <!-- 2. DAILY ANKI ENGINE -->
       <section id="student-anki" class="view-section hidden">
         <div class="anki-header" style="flex-wrap:wrap;gap:12px;">
           <div>
@@ -601,19 +597,6 @@
             <div class="runner-right card" id="runner-work-pane"></div>
           </div>
         </div>
-        
-        <!-- CUSTOM HOMEWORK DYNAMIC RUNNER -->
-        <div id="hw-custom-runner-view" class="hidden" style="margin-top:20px;">
-          <div class="runner-topbar">
-            <button id="back-to-hw-custom-btn" class="btn btn-outline btn-sm">← Back to Assignments</button>
-            <h3 id="hw-custom-runner-title">Complete Task</h3>
-            <span id="hw-custom-runner-due" class="role-pill">Due</span>
-          </div>
-          <div class="grid-2col" style="margin-top:16px;">
-            <div class="card" id="hw-custom-runner-left"></div>
-            <div class="card" id="hw-custom-runner-right"></div>
-          </div>
-        </div>
 
         <!-- SUMMARY VIEW -->
         <div id="hw-analysis-view" class="hidden">
@@ -651,7 +634,7 @@
           </div>
         </div>
       </section>
-      
+
       <!-- 4. STUDENT PUNISHMENTS & EXTRAS -->
       <section id="student-punishments" class="view-section hidden">
         <div class="card" style="margin-bottom:20px;">
