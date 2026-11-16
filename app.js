@@ -42,7 +42,7 @@ const CLOUDINARY_UPLOAD_PRESET = "ielts_speaking";
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const secondaryApp = initializeApp(firebaseConfig, "SecondaryAccountCreator");
+const secondaryApp = initializeApp(firebaseConfig, `SecondaryAccountCreator_${Date.now()}`);
 const secondaryAuth = getAuth(secondaryApp);
 const DOMAIN = "@zhamil-hub.local";
 const TEACHER_EMAIL = "teacher" + DOMAIN;
@@ -172,6 +172,13 @@ loginForm.addEventListener("submit", async (e) => {
 
   try {
     await signInWithEmailAndPassword(auth, formatLoginEmail(rawId), password);
+    
+    // FIX: Clear the timeout so it doesn't trigger 10 seconds later
+    clearTimeout(timeoutId); 
+    
+    // FIX: Reset the button state so it works again if the user logs out
+    btn.disabled = false;
+    btn.textContent = "Sign In";
   } catch (err) {
     clearTimeout(timeoutId);
     loginError.textContent = "Invalid Student ID or password. Please try again.";
