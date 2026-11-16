@@ -1826,28 +1826,15 @@ window.startAssignment = function (assignmentId) {
       const totalQ = hw.totalQuestions || 40;
       const mistakeTypes = hw.skill === "reading"
         ? [
-            { key: "MCQ", label: "Multiple Choice" },
-            { key: "TFNG", label: "True / False / Not Given" },
-            { key: "YNNG", label: "Yes / No / Not Given" },
-            { key: "MATCHING_HEADINGS", label: "Matching Headings" },
-            { key: "MATCHING_INFO", label: "Matching Information" },
-            { key: "MATCHING_FEATURES", label: "Matching Features" },
-            { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" },
-            { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
-            { key: "SUMMARY_COMPLETION", label: "Summary Completion" },
-            { key: "NOTE_COMPLETION", label: "Note Completion" },
-            { key: "TABLE_COMPLETION", label: "Table Completion" },
-            { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" },
-            { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" },
-            { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+            { key: "MCQ", label: "Multiple Choice" }, { key: "TFNG", label: "True / False / Not Given" }, { key: "YNNG", label: "Yes / No / Not Given" },
+            { key: "MATCHING_HEADINGS", label: "Matching Headings" }, { key: "MATCHING_INFO", label: "Matching Information" }, { key: "MATCHING_FEATURES", label: "Matching Features" },
+            { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+            { key: "SUMMARY_COMPLETION", label: "Summary Completion" }, { key: "NOTE_COMPLETION", label: "Note Completion" }, { key: "TABLE_COMPLETION", label: "Table Completion" },
+            { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" }, { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
           ]
         : [
-            { key: "MCQ", label: "Multiple Choice" },
-            { key: "MATCHING", label: "Matching" },
-            { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
-            { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary" },
-            { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
-            { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+            { key: "MCQ", label: "Multiple Choice" }, { key: "MATCHING", label: "Matching" }, { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
+            { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
           ];
       
       leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
