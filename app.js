@@ -852,7 +852,12 @@ function renderTeacherGradingQueue(students, submissions) {
         </div>
       `;
     } else if (sub.skill === "other") {
-      contentHtml = `<div style="margin:10px 0;"><p style="font-size:14px;white-space:pre-line;">${escapeHtml(sub.notes || sub.responseText || "")}</p></div>`;
+      contentHtml = `
+        <div style="margin:10px 0;">
+          <p style="font-size:14px;white-space:pre-line;margin-bottom:8px;">${escapeHtml(sub.notes || sub.responseText || "")}</p>
+          ${sub.screenshotUrl ? `<a href="${sub.screenshotUrl}" target="_blank" rel="noopener"><img src="${sub.screenshotUrl}" alt="Attached Work" style="max-width:100%;max-height:280px;border:1px solid var(--border);border-radius:8px;" /></a>` : ""}
+        </div>
+      `;
     }
 
     const bandSelectorHtml = noBandRequired
@@ -1565,6 +1570,7 @@ window.startAssignment = function (assignmentId) {
   } else if (hw.skill === "other") {
     leftPane.innerHTML = `<h3>Task Instructions</h3><p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>`;
     rightPane.innerHTML = `<h3>Submit Task Response</h3>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" /></div>
       <div class="form-group"><label>Your Notes / Answers</label><textarea id="other-notes" rows="8" style="width:100%;padding:10px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;"></textarea></div>
       <button class="btn btn-primary btn-full" id="submit-other-btn">Submit Task</button>`;
     document.getElementById("submit-other-btn").addEventListener("click", () => submitOtherHomework(hw));
@@ -1830,15 +1836,27 @@ async function submitGrammarHomework(hw) {
 
 async function submitOtherHomework(hw) {
   const notes = document.getElementById("other-notes").value.trim();
-  if (!notes) return alert("Please enter your notes or answers before submitting.");
+  const file = document.getElementById("other-file")?.files[0];
+  if (!notes && !file) return alert("Please enter notes or attach a file before submitting.");
   
   const btn = document.getElementById("submit-other-btn");
-  btn.disabled = true; btn.textContent = "Submitting...";
+  btn.disabled = true; btn.textContent = file ? "Uploading image..." : "Submitting...";
 
   try {
+    let screenshotUrl = null;
+    if (file) {
+      const formData = new FormData(); 
+      formData.append("file", file); 
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
+      screenshotUrl = data.secure_url;
+    }
+
     const isLate = new Date() > new Date(hw.dueDate);
     const submissionData = {
-      assignmentId: hw.id, studentId: currentStudentId, skill: "other", status: "submitted", isLate, submittedAt: serverTimestamp(), notes
+      assignmentId: hw.id, studentId: currentStudentId, skill: "other", status: "submitted", isLate, submittedAt: serverTimestamp(), notes, screenshotUrl
     };
 
     if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
@@ -1962,6 +1980,7 @@ window.startPunishmentRunner = async function(id) {
   } else {
     rightPane.innerHTML = `
       <h3>Submit Work</h3>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="pun-other-file" accept="image/*" /></div>
       <div class="form-group"><label>Type your answer or notes here</label><textarea id="pun-note-input" rows="8" style="width:100%;padding:10px;border-radius:8px;"></textarea></div>
       <button class="btn btn-primary btn-full" onclick="submitPunishmentNote()">Submit Task</button>
     `;
@@ -2038,18 +2057,38 @@ window.submitPunishmentGrammar = async function() {
 
 window.submitPunishmentNote = async function() {
   const text = document.getElementById("pun-note-input").value.trim();
-  if (!text) return alert("Please enter your notes or answers.");
+  const file = document.getElementById("pun-other-file")?.files[0];
+  if (!text && !file) return alert("Please enter your notes or attach a file.");
 
-  const submissionData = {
-    assignmentId: activePunishment.id, studentId: currentStudentId, skill: "other", status: "submitted",
-    isLate: false, submittedAt: serverTimestamp(), notes: text
-  };
+  const btn = document.querySelector("#pun-runner-right .btn-primary");
+  if(btn) { btn.disabled = true; btn.textContent = file ? "Uploading..." : "Submitting..."; }
 
-  await setDoc(doc(db, "submissions", `${activePunishment.id}_${currentStudentId}`), submissionData);
-  await updateDoc(doc(db, "punishments", activePunishment.id), { status: "submitted", submission: { notes: text } });
-  
-  alert("Submitted successfully!");
-  document.getElementById("back-to-punishments-btn").click();
+  try {
+    let screenshotUrl = null;
+    if (file) {
+      const formData = new FormData(); 
+      formData.append("file", file); 
+      formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+      const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
+      screenshotUrl = data.secure_url;
+    }
+
+    const submissionData = {
+      assignmentId: activePunishment.id, studentId: currentStudentId, skill: "other", status: "submitted",
+      isLate: false, submittedAt: serverTimestamp(), notes: text, screenshotUrl
+    };
+
+    await setDoc(doc(db, "submissions", `${activePunishment.id}_${currentStudentId}`), submissionData);
+    await updateDoc(doc(db, "punishments", activePunishment.id), { status: "submitted", submission: { notes: text, screenshotUrl } });
+    
+    alert("Submitted successfully!");
+    document.getElementById("back-to-punishments-btn").click();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    if(btn) { btn.disabled = false; btn.textContent = "Submit Task"; }
+  }
 };
 
 document.getElementById("back-to-punishments-btn")?.addEventListener("click", () => {
