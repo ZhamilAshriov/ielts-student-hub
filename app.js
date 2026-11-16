@@ -388,24 +388,54 @@ if (punSkillSel) {
   document.getElementById("pun-config-container").innerHTML = getDispatcherConfigHTML(punSkillSel.value, "pun");
 }
 
-// Handle Homework Form Dispatch
-const assignHwForm = document.getElementById("assign-hw-form");
-if (assignHwForm) {
-  assignHwForm.addEventListener("submit", async (e) => {
+// Handle Homework Form Dispatch (Goes to Assignments)
+const createHwForm = document.getElementById("create-hw-form");
+if (createHwForm) {
+  createHwForm.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const btn = document.getElementById("assign-hw-btn");
-    const msgEl = document.getElementById("hw-assign-msg");
+    const msgEl = document.getElementById("hw-dispatch-msg");
+    const btn = document.getElementById("dispatch-hw-btn");
 
     const target = document.getElementById("hw-target-select").value;
     const skill = document.getElementById("hw-skill-select").value;
     const dueDate = document.getElementById("hw-duedate").value;
-    const { reason, details } = extractDynamicDetails(skill, "hw");
+
+    let title = "";
+    let details = {};
+
+    if (skill === "listening" || skill === "reading") {
+      const count = document.querySelector("#hw-dynamic-config .config-count").value;
+      title = `${count}x ${skill.toUpperCase()} Test Set(s)`;
+      details = { testCount: Number(count) };
+    } else if (skill === "writing") {
+      const isTask1 = document.querySelector("#hw-dynamic-config .config-w-task").value === "task1";
+      if (isTask1) {
+        title = document.querySelector("#hw-dynamic-config .config-w-title").value.trim();
+        details = { taskType: "task1", title };
+      } else {
+        title = document.querySelector("#hw-dynamic-config .config-w-title").value.trim();
+        const promptText = document.querySelector("#hw-dynamic-config .config-w-prompt").value.trim();
+        details = { taskType: "task2", title, promptText };
+      }
+    } else if (skill === "speaking") {
+      const questions = document.querySelector("#hw-dynamic-config .config-spk-questions").value.trim();
+      const notes = document.querySelector("#hw-dynamic-config .config-spk-notes").value.trim();
+      title = "Speaking Practice & Questions";
+      details = { questions, notes };
+    }
 
     btn.disabled = true;
     btn.textContent = "Publishing...";
     msgEl.textContent = "";
 
     try {
+      // Automatically map to the current active week in the syllabus
+      let activeWeek = "Current Assignments";
+      if (typeof ASSIGNMENTS !== 'undefined' && ASSIGNMENTS.length > 0) {
+        const upcoming = ASSIGNMENTS.find(a => new Date(a.dueDate) >= new Date());
+        activeWeek = upcoming ? upcoming.week : ASSIGNMENTS[ASSIGNMENTS.length - 1].week;
+      }
+
       const targets = target === "ALL" ? cachedStudents.map((s) => s.studentId) : [target];
       for (const studentId of targets) {
         const taskId = `CUSTOMHW_${studentId}_${Date.now()}`;
@@ -413,19 +443,20 @@ if (assignHwForm) {
           id: taskId,
           studentId,
           skill,
-          reason,
+          title,
           details,
-          status: "pending",
           dueDate,
-          assignedAt: serverTimestamp()
+          week: activeWeek, // <-- This ensures it merges into the current week section!
+          status: "pending",
+          createdAt: serverTimestamp()
         });
       }
 
       msgEl.style.color = "var(--success)";
-      msgEl.textContent = target === "ALL" ? "Successfully broadcasted homework!" : `Assigned to ${target}!`;
-      assignHwForm.reset();
+      msgEl.textContent = "Homework successfully published to student assignments!";
+      createHwForm.reset();
       document.getElementById("hw-duedate").value = getTodayStr() + "T23:59";
-      document.getElementById("hw-config-container").innerHTML = getDispatcherConfigHTML(document.getElementById("hw-skill-select").value, "hw");
+      renderSkillConfigForm("hw-skill-select", "hw-dynamic-config");
       loadTeacherData();
     } catch (err) {
       msgEl.style.color = "var(--danger)";
@@ -436,7 +467,6 @@ if (assignHwForm) {
     }
   });
 }
-
 // Handle Punishments Dispatch
 const assignPunForm = document.getElementById("assign-pun-form");
 if (assignPunForm) {
@@ -1572,20 +1602,34 @@ function renderAssignmentsList() {
   const todoList = [];
   const doneList = [];
 
+  // Determine the active fallback week for older custom assignments
+  let fallbackWeek = "Current Assignments";
+  if (typeof ASSIGNMENTS !== 'undefined' && ASSIGNMENTS.length > 0) {
+    const upcoming = ASSIGNMENTS.find(a => new Date(a.dueDate) >= now);
+    fallbackWeek = upcoming ? upcoming.week : ASSIGNMENTS[ASSIGNMENTS.length - 1].week;
+  }
+
   ASSIGNMENTS.forEach((hw) => {
     if (studentSubmissionsMap[hw.id]) doneList.push(hw);
     else todoList.push(hw);
   });
 
   cachedTeacherHw.forEach((t) => {
+    // If the database has a legacy tag, override it so it groups seamlessly
+    let displayWeek = t.week;
+    if (!displayWeek || displayWeek === "Custom Assignments" || displayWeek === "Custom Teacher Tasks") {
+      displayWeek = fallbackWeek;
+    }
+
     const hwFormat = {
       id: t.id,
-      title: t.reason,
+      title: t.title || t.reason,
       skill: t.skill,
       dueDate: t.dueDate,
-      week: "Custom Assignments",
+      week: displayWeek, // <-- Maps correctly to the UI headers
       isDynamic: true,
-      details: t.details
+      details: t.details,
+      status: t.status
     };
     if (studentSubmissionsMap[t.id] || t.status === "verified" || t.status === "submitted") {
       doneList.push(hwFormat);
@@ -1634,7 +1678,6 @@ function renderAssignmentsList() {
         else if (hw.skill === "speaking") detailStr = hw.details.notes || "Speaking practice";
         else if (hw.skill === "other") detailStr = "Custom task";
 
-        // Check if submitted from map (Custom HW sets map flag manually)
         const isSub = studentSubmissionsMap[hw.id] || hw.status === "submitted" || hw.status === "verified";
         
         if (isSub) {
