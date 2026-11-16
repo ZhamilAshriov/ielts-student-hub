@@ -669,7 +669,7 @@ function renderTeacherRoster(students) {
     return `
       <tr>
         <td><strong>${s.studentId}</strong></td>
-        <td>${s.fullName}</td>
+        <td>${escapeHtml(s.fullName)}</td>
         <td>🔥 ${stats.streak || 0}d</td>
         <td>${reviewedToday > 0 ? `<span style="color:var(--success);font-weight:600;">${reviewedToday}</span>` : `<span class="muted">0</span>`}</td>
         <td><button class="btn btn-outline btn-sm" onclick="window.inspectStudent('${s.studentId}')">Inspect Stats</button></td>
@@ -876,24 +876,22 @@ function renderTeacherGradingQueue(students, submissions) {
         <div class="grade-controls-row">
           ${bandSelectorHtml}
           <div><label>Teacher Feedback</label><input type="text" id="fb-${sub.docId}" placeholder="Leave a comment or feedback..." value="${escapeHtml(sub.teacherFeedback || "")}" /></div>
-          <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', ${noBandRequired})">Save & Verify</button>
+          <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', '${sub.assignmentId}', ${noBandRequired})">Save & Verify</button>
         </div>
       </div>
     `;
   }).join("");
 }
 
-window.saveTeacherGrade = async function (docId, noBandRequired = false) {
+window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = false) {
   const rawBand = document.getElementById(`band-${docId}`).value;
   const fbVal = document.getElementById(`fb-${docId}`).value.trim();
   const updatePayload = { teacherFeedback: fbVal, status: "graded", gradedAt: serverTimestamp() };
   if (!noBandRequired && rawBand) updatePayload.bandScore = Number(rawBand);
   await updateDoc(doc(db, "submissions", docId), updatePayload);
   
-  // If it was a punishment, also update the main document status so it shows verified
-  if (docId.includes("PUN_")) {
-    const rawPunId = docId.split("_").slice(0, -1).join("_"); 
-    await updateDoc(doc(db, "punishments", rawPunId), { status: "verified" }).catch(()=>console.log("Not a punishment"));
+  if (assignmentId && assignmentId.startsWith("PUN_")) {
+    await updateDoc(doc(db, "punishments", assignmentId), { status: "verified" }).catch(()=>console.log("Not a punishment"));
   }
 
   alert("Verified & feedback saved!");
@@ -2005,6 +2003,7 @@ window.startBrowserRecording = async function () {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     recordedChunks = [];
+    recordedAudioBlob = null;
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
@@ -2122,6 +2121,7 @@ async function submitOtherHomework(hw) {
       const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
       const data = await res.json();
+      if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
       screenshotUrl = data.secure_url;
     }
 
