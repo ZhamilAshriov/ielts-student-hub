@@ -139,10 +139,12 @@ function getAnnouncementBadgeClass(tag) {
 }
 
 const MISTAKE_LABELS = {
-  TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given", MATCHING_HEADINGS: "Matching Headings",
-  MCQ: "Multiple Choice", GAP_FILL: "Summary / Note / Table Completion", MATCHING_INFO: "Matching Information / Features",
-  MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary",
-  SENTENCE_COMPLETION: "Listening: Sentence Completion", SHORT_ANSWER: "Listening: Short-Answer Questions"
+  MCQ: "Multiple Choice", TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given",
+  MATCHING_HEADINGS: "Matching Headings", MATCHING_INFO: "Matching Information", MATCHING_FEATURES: "Matching Features",
+  MATCHING_SENTENCE_ENDINGS: "Matching Sentence Endings", SENTENCE_COMPLETION: "Sentence Completion",
+  SUMMARY_COMPLETION: "Summary Completion", NOTE_COMPLETION: "Note Completion", TABLE_COMPLETION: "Table Completion",
+  FLOW_CHART_COMPLETION: "Flow-chart Completion", DIAGRAM_LABELLING: "Diagram Labelling", SHORT_ANSWER: "Short-Answer Questions",
+  MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary"
 };
 
 // ==========================================
@@ -1334,15 +1336,314 @@ document.getElementById("practice-all-btn")?.addEventListener("click", () => {
 // DYNAMIC RUNNER & DISPATCHING (SHARED)
 // ==========================================
 function getDynamicRunnerHTML(task, type) {
-  // ... compressed code ...
+  let rightHtml = "";
+  if (task.skill === "listening" || task.skill === "reading") {
+    const totalQ = (task.details?.testCount || 1) * 40;
+    const mistakeTypes = task.skill === "reading"
+      ? [
+          { key: "MCQ", label: "Multiple Choice" },
+          { key: "TFNG", label: "True / False / Not Given" },
+          { key: "YNNG", label: "Yes / No / Not Given" },
+          { key: "MATCHING_HEADINGS", label: "Matching Headings" },
+          { key: "MATCHING_INFO", label: "Matching Information" },
+          { key: "MATCHING_FEATURES", label: "Matching Features" },
+          { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" },
+          { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+          { key: "SUMMARY_COMPLETION", label: "Summary Completion" },
+          { key: "NOTE_COMPLETION", label: "Note Completion" },
+          { key: "TABLE_COMPLETION", label: "Table Completion" },
+          { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" },
+          { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" },
+          { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+        ]
+      : [
+          { key: "MCQ", label: "Multiple Choice" },
+          { key: "MATCHING", label: "Matching" },
+          { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
+          { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary" },
+          { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+          { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+        ];
+
+    const mistakeInputsHtml = mistakeTypes.map((item) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="font-size:13px;font-weight:600;line-height:1.35;">${item.label}</span>
+        <input type="number" class="dynamic-mistake-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
+      </div>`).join("");
+
+    rightHtml = `
+      <h3>Submit Score & Screenshot</h3>
+      <div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="dynamic-lr-score" min="0" max="${totalQ}" required /></div>
+      <div class="form-group"><label>Result Screenshot (PNG / JPG)</label><input type="file" id="dynamic-lr-file" accept="image/*" required /></div>
+      <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
+      <button class="btn btn-primary btn-full" onclick="submitDynamicScreenshot(${totalQ})">Upload Screenshot & Submit Proof</button>
+    `;
+  } else if (task.skill === "speaking") {
+    rightHtml = `
+      <h3>Record Speaking Answer</h3>
+      <div style="text-align:center;padding:24px 0;">
+        <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
+        <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
+        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
+          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
+          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+        </div>
+        <div id="rec-preview-area" class="hidden" style="margin-top:16px;"><audio id="rec-audio-preview" controls style="width:100%;"></audio></div>
+      </div>
+      <button class="btn btn-primary btn-full" onclick="submitDynamicAudio()">Upload & Submit Speaking</button>
+    `;
+  } else if (task.skill === "writing") {
+    const isTask1 = task.details?.taskType === "task1";
+    const chartHtml = isTask1 ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="dynamic-w-img" accept="image/*" required /></div>` : "";
+    rightHtml = `
+      <h3>Your Essay / Report Response</h3>
+      ${chartHtml}
+      <div class="form-group"><label>Type your response here</label><textarea id="dynamic-w-text" rows="12" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
+      <button class="btn btn-primary btn-full" onclick="submitDynamicWriting(${isTask1})">Submit Writing</button>
+    `;
+  } else if (task.skill === "grammar") {
+    rightHtml = `
+      <h3>Upload Completed Pages</h3>
+      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="dynamic-gram-file" accept="image/*" required /></div>
+      <div class="form-group"><label>Student Notes / Questions (Optional)</label><input type="text" id="dynamic-gram-notes" /></div>
+      <button class="btn btn-primary btn-full" onclick="submitDynamicGrammar()">Upload & Submit Homework</button>
+    `;
+  } else {
+    rightHtml = `
+      <h3>Submit Task Response</h3>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="dynamic-other-file" accept="image/*" /></div>
+      <div class="form-group"><label>Type your answer or notes here</label><textarea id="dynamic-response-input" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
+      <button class="btn btn-primary btn-full" onclick="submitDynamicCustom()">Submit Task</button>
+    `;
+  }
+  return rightHtml;
 }
 
 window.startCustomHwRunner = async function (taskId) {
-  // ... compressed code ...
+  const snap = await getDoc(doc(db, "customAssignments", taskId));
+  if (!snap.exists()) return;
+  activeDynamicTask = snap.data();
+  activeDynamicCollection = "customAssignments";
+
+  document.getElementById("hw-list-view").classList.add("hidden");
+  document.getElementById("hw-runner-view").classList.add("hidden");
+  document.getElementById("hw-analysis-view").classList.add("hidden");
+  document.getElementById("hw-custom-runner-view").classList.remove("hidden");
+
+  document.getElementById("hw-custom-runner-title").textContent = activeDynamicTask.title || activeDynamicTask.reason;
+  document.getElementById("hw-custom-runner-due").textContent = `Due: ${formatDueDate(activeDynamicTask.dueDate)}`;
+
+  let instructionText = `<p class="passage-box" style="margin-bottom:16px;">Complete your assigned ${activeDynamicTask.skill.toUpperCase()} task and submit your work below.</p>`;
+  if (activeDynamicTask.skill === "speaking" && activeDynamicTask.details.questions) {
+    instructionText = `<div class="passage-box" style="white-space:pre-line;margin-bottom:12px;">${escapeHtml(activeDynamicTask.details.questions)}</div><p class="muted">${escapeHtml(activeDynamicTask.details.notes || "")}</p>`;
+  } else if (activeDynamicTask.skill === "writing") {
+    instructionText = `<div class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(activeDynamicTask.details.promptText || activeDynamicTask.details.title)}</div>`;
+  } else if (activeDynamicTask.skill === "listening" || activeDynamicTask.skill === "reading") {
+    instructionText = `<p class="passage-box" style="margin-bottom:16px;">Complete ${activeDynamicTask.details.testCount || 1} test set(s). Take a screenshot of your result and enter your correct answers.</p>`;
+  } else if (activeDynamicTask.skill === "grammar" || activeDynamicTask.skill === "other") {
+    instructionText = `<p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(activeDynamicTask.details.instructions || "Complete the assigned task.")}</p>`;
+  }
+
+  document.getElementById("hw-custom-runner-left").innerHTML = `<h3>Task Instructions</h3>${instructionText}`;
+  document.getElementById("hw-custom-runner-right").innerHTML = getDynamicRunnerHTML(activeDynamicTask, "customHw");
 };
 
 window.startPunishmentRunner = async function (taskId) {
-  // ... compressed code ...
+  const snap = await getDoc(doc(db, "punishments", taskId));
+  if (!snap.exists()) return;
+  activeDynamicTask = snap.data();
+  activeDynamicCollection = "punishments";
+
+  document.getElementById("student-punishments-container").parentElement.classList.add("hidden");
+  document.getElementById("student-punishments-container").classList.add("hidden");
+  document.getElementById("punishment-runner-view").classList.remove("hidden");
+
+  document.getElementById("punishment-runner-title").textContent = activeDynamicTask.reason;
+  document.getElementById("punishment-runner-due").textContent = `Due: ${formatDueDate(activeDynamicTask.dueDate)}`;
+
+  let instructionText = `<p class="passage-box" style="margin-bottom:16px;">Complete your assigned ${activeDynamicTask.skill.toUpperCase()} punishment and submit your work below.</p>`;
+  if (activeDynamicTask.skill === "speaking" && activeDynamicTask.details.questions) {
+    instructionText = `<div class="passage-box" style="white-space:pre-line;margin-bottom:12px;">${escapeHtml(activeDynamicTask.details.questions)}</div><p class="muted">${escapeHtml(activeDynamicTask.details.notes || "")}</p>`;
+  } else if (activeDynamicTask.skill === "writing") {
+    instructionText = `<div class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(activeDynamicTask.details.promptText || activeDynamicTask.details.title)}</div>`;
+  } else if (activeDynamicTask.skill === "listening" || activeDynamicTask.skill === "reading") {
+    instructionText = `<p class="passage-box" style="margin-bottom:16px;">Complete ${activeDynamicTask.details.testCount || 1} test set(s). Take a screenshot of your result and enter your correct answers.</p>`;
+  } else if (activeDynamicTask.skill === "grammar" || activeDynamicTask.skill === "other") {
+    instructionText = `<p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(activeDynamicTask.details.instructions || "Complete the assigned remedial task.")}</p>`;
+  }
+
+  document.getElementById("pun-runner-left").innerHTML = `<h3>Punishment Instructions</h3>${instructionText}`;
+  document.getElementById("pun-runner-right").innerHTML = getDynamicRunnerHTML(activeDynamicTask, "punishment");
+};
+
+window.submitDynamicScreenshot = async function(totalQ) {
+  const file = document.getElementById("dynamic-lr-file").files[0];
+  const rawScore = Number(document.getElementById("dynamic-lr-score").value);
+  if (!file || isNaN(rawScore)) return alert("Please enter your score and attach a screenshot.");
+
+  const mistakeCounts = {};
+  const updatedMistakes = { ...(currentStudentProfile.permanentMistakes || {}) };
+  
+  document.querySelectorAll(".dynamic-mistake-input").forEach((inp) => {
+    const type = inp.dataset.type;
+    const wrongNum = Math.max(0, Number(inp.value) || 0);
+    mistakeCounts[type] = wrongNum;
+    if (wrongNum > 0) updatedMistakes[type] = { wrong: (updatedMistakes[type]?.wrong || 0) + wrongNum };
+  });
+
+  const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Upload failed.");
+
+  await updateDoc(doc(db, "users", currentStudentId), { permanentMistakes: updatedMistakes });
+  currentStudentProfile.permanentMistakes = updatedMistakes;
+
+  const submissionData = {
+    status: "submitted",
+    submission: { scoreText: `${rawScore} / ${totalQ}`, screenshotUrl: data.secure_url, mistakeCounts },
+    submittedAt: serverTimestamp()
+  };
+
+  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: activeDynamicTask.skill, status: "submitted",
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(),
+    rawScore, totalQuestions: totalQ, screenshotUrl: data.secure_url, mistakeCounts
+  });
+
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), submissionData);
+
+  alert("Task submitted successfully!");
+  if (activeDynamicCollection === "customAssignments") {
+    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+    document.getElementById("back-to-hw-custom-btn").click();
+  } else {
+    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+    document.getElementById("back-to-punishments-btn").click();
+  }
+  updateDashboardUI();
+};
+
+window.submitDynamicWriting = async function(isTask1) {
+  const text = document.getElementById("dynamic-w-text").value.trim();
+  const imgFile = document.getElementById("dynamic-w-img")?.files[0];
+  if (!text) return alert("Please type your response.");
+  if (isTask1 && !imgFile) return alert("Please upload your chart.");
+
+  let chartUrl = null;
+  if (imgFile) {
+    const formData = new FormData(); formData.append("file", imgFile); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+    const data = await res.json();
+    chartUrl = data.secure_url;
+  }
+
+  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "writing", status: "submitted",
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), essayText: text, chartImageUrl: chartUrl
+  });
+
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { text }, submittedAt: serverTimestamp() });
+  alert("Writing submitted successfully!");
+  if (activeDynamicCollection === "customAssignments") {
+    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+    document.getElementById("back-to-hw-custom-btn").click();
+  } else {
+    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+    document.getElementById("back-to-punishments-btn").click();
+  }
+  updateDashboardUI();
+};
+
+window.submitDynamicAudio = async function () {
+  if (!recordedAudioBlob) return alert("Please record your audio first.");
+  const formData = new FormData();
+  formData.append("file", recordedAudioBlob, `task_${activeDynamicTask.id}.webm`);
+  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (!data.secure_url) return alert("Audio upload failed.");
+
+  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "speaking", status: "submitted",
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), audioUrl: data.secure_url
+  });
+
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { audioUrl: data.secure_url }, submittedAt: serverTimestamp() });
+  
+  alert("Speaking task submitted!");
+  if (activeDynamicCollection === "customAssignments") {
+    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+    document.getElementById("back-to-hw-custom-btn").click();
+  } else {
+    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+    document.getElementById("back-to-punishments-btn").click();
+  }
+  updateDashboardUI();
+};
+
+window.submitDynamicGrammar = async function() {
+  const file = document.getElementById("dynamic-gram-file").files[0];
+  const notes = document.getElementById("dynamic-gram-notes").value.trim();
+  if (!file) return alert("Please upload a photo of your workbook.");
+
+  const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+  const data = await res.json();
+
+  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "grammar", status: "submitted",
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), screenshotUrl: data.secure_url, notes
+  });
+
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { screenshotUrl: data.secure_url }, submittedAt: serverTimestamp() });
+  
+  alert("Grammar uploaded successfully!");
+  if (activeDynamicCollection === "customAssignments") {
+    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+    document.getElementById("back-to-hw-custom-btn").click();
+  } else {
+    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+    document.getElementById("back-to-punishments-btn").click();
+  }
+  updateDashboardUI();
+};
+
+window.submitDynamicCustom = async function() {
+  const text = document.getElementById("dynamic-response-input").value.trim();
+  const file = document.getElementById("dynamic-other-file")?.files[0];
+  if (!text && !file) return alert("Please enter your response or attach a file.");
+
+  let screenshotUrl = null;
+  if (file) {
+    const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+    const data = await res.json();
+    screenshotUrl = data.secure_url;
+  }
+
+  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "other", status: "submitted",
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), notes: text, screenshotUrl
+  });
+
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { responseText: text, screenshotUrl }, submittedAt: serverTimestamp() });
+  
+  alert("Task submitted successfully!");
+  if (activeDynamicCollection === "customAssignments") {
+    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+    document.getElementById("back-to-hw-custom-btn").click();
+  } else {
+    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+    document.getElementById("back-to-punishments-btn").click();
+  }
+  updateDashboardUI();
 };
 
 // ==========================================
@@ -1521,11 +1822,33 @@ window.startAssignment = function (assignmentId) {
         <div class="form-group"><label>Score Breakdown</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 14px;">${drillRowsHtml}</div></div>
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Drill</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
-    } else {
+   } else {
       const totalQ = hw.totalQuestions || 40;
       const mistakeTypes = hw.skill === "reading"
-        ? [{ key: "TFNG", label: "True / False / Not Given" }, { key: "YNNG", label: "Yes / No / Not Given" }, { key: "MATCHING_HEADINGS", label: "Matching Headings" }, { key: "MCQ", label: "Multiple Choice" }, { key: "GAP_FILL", label: "Summary / Note / Table Completion" }, { key: "MATCHING_INFO", label: "Matching Information / Features" }]
-        : [{ key: "MCQ", label: "Multiple Choice" }, { key: "MATCHING", label: "Matching" }, { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" }, { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" }];
+        ? [
+            { key: "MCQ", label: "Multiple Choice" },
+            { key: "TFNG", label: "True / False / Not Given" },
+            { key: "YNNG", label: "Yes / No / Not Given" },
+            { key: "MATCHING_HEADINGS", label: "Matching Headings" },
+            { key: "MATCHING_INFO", label: "Matching Information" },
+            { key: "MATCHING_FEATURES", label: "Matching Features" },
+            { key: "MATCHING_SENTENCE_ENDINGS", label: "Matching Sentence Endings" },
+            { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+            { key: "SUMMARY_COMPLETION", label: "Summary Completion" },
+            { key: "NOTE_COMPLETION", label: "Note Completion" },
+            { key: "TABLE_COMPLETION", label: "Table Completion" },
+            { key: "FLOW_CHART_COMPLETION", label: "Flow-chart Completion" },
+            { key: "DIAGRAM_LABELLING", label: "Diagram Labelling" },
+            { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+          ]
+        : [
+            { key: "MCQ", label: "Multiple Choice" },
+            { key: "MATCHING", label: "Matching" },
+            { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" },
+            { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary" },
+            { key: "SENTENCE_COMPLETION", label: "Sentence Completion" },
+            { key: "SHORT_ANSWER", label: "Short-Answer Questions" }
+          ];
       
       leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
         <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How to log your mistakes:</strong><br/>Count how many questions you missed in each category.</div>`;
@@ -1536,46 +1859,10 @@ window.startAssignment = function (assignmentId) {
         </div>`).join("");
       rightPane.innerHTML = `<h3>Submit Score</h3><div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="lr-raw-score" min="0" max="${totalQ}" required /></div>
         <div class="form-group"><label>Upload Result Screenshot</label><input type="file" id="lr-screenshot-file" accept="image/*" required /></div>
-        <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;">${mistakeInputsHtml}</div></div>
+        <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Score</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
     }
-  } else if (hw.skill === "writing") {
-    leftPane.innerHTML = `<h3>Writing Prompt</h3><div class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.promptText || hw.instructions)}</div>`;
-    const chartUploadHtml = (hw.id === "HW-05" || hw.isTask1) ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" required /></div>` : "";
-    rightPane.innerHTML = `<h3>Your Response</h3>${chartUploadHtml}
-      <div class="form-group"><label>Type your response here</label><textarea id="writing-essay-input" rows="12" style="width:100%;padding:10px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;"></textarea></div>
-      <button class="btn btn-primary btn-full" id="submit-writing-btn">Submit Writing</button>`;
-    document.getElementById("submit-writing-btn").addEventListener("click", () => submitWritingHomework(hw));
-  } else if (hw.skill === "speaking") {
-    leftPane.innerHTML = `<h3>Speaking Instructions</h3><p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>`;
-    rightPane.innerHTML = `<h3>Record Speaking Response</h3>
-      <div style="text-align:center;padding:24px 0;">
-        <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
-        <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
-        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
-          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
-          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
-        </div>
-        <div id="rec-preview-area" class="hidden" style="margin-top:16px;"><audio id="rec-audio-preview" controls style="width:100%;"></audio></div>
-      </div>
-      <button class="btn btn-primary btn-full" id="submit-speaking-btn" onclick="submitSpeakingHomework('${hw.id}')">Upload & Submit Recording</button>`;
-  } else if (hw.skill === "grammar") {
-    leftPane.innerHTML = `<h3>Grammar Instructions</h3><p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>`;
-    rightPane.innerHTML = `<h3>Upload Completed Pages</h3>
-      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="gram-file" accept="image/*" required /></div>
-      <div class="form-group"><label>Student Notes (Optional)</label><input type="text" id="gram-notes" /></div>
-      <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit</button>`;
-    document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
-  } else if (hw.skill === "other") {
-    leftPane.innerHTML = `<h3>Task Instructions</h3><p class="passage-box" style="white-space:pre-line;margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>`;
-    rightPane.innerHTML = `<h3>Submit Task Response</h3>
-      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" /></div>
-      <div class="form-group"><label>Your Notes / Answers</label><textarea id="other-notes" rows="8" style="width:100%;padding:10px;font-family:inherit;font-size:14px;border:1px solid var(--border);border-radius:8px;"></textarea></div>
-      <button class="btn btn-primary btn-full" id="submit-other-btn">Submit Task</button>`;
-    document.getElementById("submit-other-btn").addEventListener("click", () => submitOtherHomework(hw));
-  }
-};
 
 // --- Submission Handlers (Shared) ---
 async function submitScreenshotHomework(hw) {
