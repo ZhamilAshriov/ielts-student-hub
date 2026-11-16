@@ -795,8 +795,19 @@ if (refreshAttBtn) refreshAttBtn.addEventListener("click", renderTeacherAttendan
 if (refreshQrBtn) refreshQrBtn.addEventListener("click", renderTeacherAttendanceManager);
 
 // ==========================================
-// PUNISHMENTS & MAKEUP SYSTEM (TEACHER)
+// QUICK ASSIGNMENT & DISPATCHER (TEACHER)
 // ==========================================
+function populatePunishmentStudentDropdown(students) {
+  const sel = document.getElementById("pun-student-select");
+  if (!sel) return;
+  const currentVal = sel.value;
+  sel.innerHTML = `
+    <option value="">-- Choose Target --</option>
+    <option value="ALL">📢 All Students (Whole Class Broadcast)</option>
+  ` + students.map((s) => `<option value="${s.studentId}">${s.studentId} — ${s.fullName}</option>`).join("");
+  if (currentVal) sel.value = currentVal;
+}
+
 const punSkillSelect = document.getElementById("pun-skill-select");
 if (punSkillSelect) {
   punSkillSelect.addEventListener("change", renderPunishmentConfigInputs);
@@ -811,47 +822,22 @@ function renderPunishmentConfigInputs() {
   if (skill === "listening" || skill === "reading") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-count">Number of Test Sets / Passages</label>
-        <input type="number" id="pun-count" min="1" max="5" value="1" required />
-        <small class="muted">e.g., 1 to 2 listening or reading tests</small>
+        <label for="pun-count">How many test sets? (e.g. 2)</label>
+        <input type="number" id="pun-count" min="1" max="10" value="1" required />
       </div>
     `;
   } else if (skill === "speaking") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-spk-part">Speaking Part</label>
-        <select id="pun-spk-part">
-          <option value="Part 1 (Introduction & Interview)">Part 1 (Introduction & Interview)</option>
-          <option value="Part 2 (Long Turn / Cue Card)">Part 2 (Long Turn / Cue Card)</option>
-          <option value="Part 3 (Two-Way Discussion)">Part 3 (Two-Way Discussion)</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="pun-spk-qty">Number of Questions / Topics</label>
-        <select id="pun-spk-qty">
-          <option value="10 Questions">10 Questions</option>
-          <option value="20 Questions">20 Questions</option>
-          <option value="50 Questions">50 Questions</option>
-          <option value="100 Questions">100 Questions</option>
-        </select>
+        <label for="pun-spk-notes">Speaking Instructions / Prompt / Notes</label>
+        <textarea id="pun-spk-notes" rows="3" placeholder="e.g. Complete Speaking Part 2 on Describe a memorable journey. Talk for 2 full minutes." required></textarea>
       </div>
     `;
-  } else if (skill === "writing") {
+  } else if (skill === "other") {
     container.innerHTML = `
       <div class="form-group">
-        <label for="pun-wt-task">Writing Task Type</label>
-        <select id="pun-wt-task">
-          <option value="Task 1: Line Graph">Task 1: Line Graph</option>
-          <option value="Task 1: Bar Chart">Task 1: Bar Chart</option>
-          <option value="Task 1: Pie Chart">Task 1: Pie Chart</option>
-          <option value="Task 1: Table">Task 1: Table</option>
-          <option value="Task 1: Process Diagram / Map">Task 1: Process Diagram / Map</option>
-          <option value="Task 2: Opinion / Agreement Essay">Task 2: Opinion / Agreement Essay</option>
-          <option value="Task 2: Discussion Essay">Task 2: Discussion Essay</option>
-          <option value="Task 2: Problem & Solution Essay">Task 2: Problem & Solution Essay</option>
-          <option value="Task 2: Advantage & Disadvantage Essay">Task 2: Advantage & Disadvantage Essay</option>
-          <option value="Task 2: Two-Part Question Essay">Task 2: Two-Part Question Essay</option>
-        </select>
+        <label for="pun-custom-title">Assignment Title / Instructions</label>
+        <input type="text" id="pun-custom-title" placeholder="e.g. Vocabulary Workbook Unit 3 Exercises" required />
       </div>
     `;
   }
@@ -864,93 +850,61 @@ if (assignPunishmentForm) {
     const msgEl = document.getElementById("pun-assign-msg");
     const btn = document.getElementById("assign-pun-btn");
 
-    const studentId = document.getElementById("pun-student-select").value;
+    const target = document.getElementById("pun-student-select").value;
     const skill = document.getElementById("pun-skill-select").value;
-    const reason = document.getElementById("pun-reason").value.trim();
     const dueDate = document.getElementById("pun-duedate").value;
 
+    let reason = "";
     let details = {};
+
     if (skill === "listening" || skill === "reading") {
-      details.testCount = Number(document.getElementById("pun-count").value);
+      const count = document.getElementById("pun-count").value;
+      reason = `${count}x ${skill.toUpperCase()} Test Set(s)`;
+      details = { testCount: Number(count) };
     } else if (skill === "speaking") {
-      details.part = document.getElementById("pun-spk-part").value;
-      details.quantity = document.getElementById("pun-spk-qty").value;
-    } else if (skill === "writing") {
-      details.taskType = document.getElementById("pun-wt-task").value;
+      reason = document.getElementById("pun-spk-notes").value.trim();
+      details = { notes: reason };
+    } else if (skill === "other") {
+      reason = document.getElementById("pun-custom-title").value.trim();
+      details = { custom: true };
     }
 
     btn.disabled = true;
-    btn.textContent = "Assigning...";
+    btn.textContent = "Dispatching...";
     msgEl.textContent = "";
 
     try {
-      const punId = `PUN_${Date.now()}`;
-      await setDoc(doc(db, "punishments", punId), {
-        id: punId,
-        studentId,
-        skill,
-        reason,
-        details,
-        status: "pending",
-        dueDate,
-        assignedAt: serverTimestamp()
-      });
+      const targets = target === "ALL" ? cachedStudents.map((s) => s.studentId) : [target];
+
+      for (const studentId of targets) {
+        const punId = `PUN_${studentId}_${Date.now()}`;
+        await setDoc(doc(db, "punishments", punId), {
+          id: punId,
+          studentId,
+          skill,
+          reason,
+          details,
+          status: "pending",
+          dueDate,
+          assignedAt: serverTimestamp()
+        });
+      }
 
       msgEl.style.color = "var(--success)";
-      msgEl.textContent = `Punishment successfully assigned to ${studentId}!`;
+      msgEl.textContent = target === "ALL" ? "Successfully broadcasted to all students!" : `Successfully assigned to ${target}!`;
       assignPunishmentForm.reset();
+      document.getElementById("pun-duedate").value = getTodayStr() + "T23:59";
       renderPunishmentConfigInputs();
       loadTeacherData();
     } catch (err) {
       msgEl.style.color = "var(--danger)";
-      msgEl.textContent = "Error assigning punishment: " + err.message;
+      msgEl.textContent = "Error dispatching assignment: " + err.message;
     } finally {
       btn.disabled = false;
-      btn.textContent = "Assign Punishment";
+      btn.textContent = "Dispatch Assignment 🚀";
     }
   });
 }
-
-function renderTeacherPunishments(punishments, students) {
-  const tbody = document.getElementById("group-punishments-tbody");
-  if (!tbody) return;
-
-  if (punishments.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="5" class="muted center">No active punishments assigned.</td></tr>`;
-    return;
-  }
-
-  const nameMap = {};
-  students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
-
-  tbody.innerHTML = punishments.map((p) => {
-    const sName = nameMap[p.studentId] || p.studentId;
-    let detailStr = "";
-    if (p.skill === "listening" || p.skill === "reading") detailStr = `${p.details.testCount} test set(s)`;
-    else if (p.skill === "speaking") detailStr = `${p.details.part} (${p.details.quantity})`;
-    else if (p.skill === "writing") detailStr = p.details.taskType;
-
-    const statusBadge = p.status === "verified" ? `<span class="badge badge-green">Verified</span>`
-      : p.status === "submitted" ? `<span class="badge badge-blue">Submitted</span>`
-      : `<span class="badge badge-red">Pending</span>`;
-
-    return `
-      <tr>
-        <td><strong>${p.studentId}</strong><br><span class="muted" style="font-size:12px;">${sName}</span></td>
-        <td><span class="role-pill">${p.skill.toUpperCase()}</span><br>${escapeHtml(p.reason)}</td>
-        <td>${escapeHtml(detailStr)}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(p.dueDate)}</span></td>
-        <td>${statusBadge}</td>
-        <td><button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deletePunishment('${p.id}')">Delete</button></td>
-      </tr>
-    `;
-  }).join("");
-}
-
-window.deletePunishment = async function (punId) {
-  if (!confirm("Remove this assigned punishment?")) return;
-  await deleteDoc(doc(db, "punishments", punId));
-  loadTeacherData();
-};
 
 // ==========================================
 // SHARED ANALYTICS RENDERERS (CHARTS & MISTAKES)
