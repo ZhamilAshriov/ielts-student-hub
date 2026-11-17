@@ -842,14 +842,14 @@ function renderTeacherGradingQueue(students, submissions) {
       : `<span class="badge badge-yellow">Needs Review</span>`;
     const lateBadge = sub.isLate ? `<span class="badge badge-red">Late</span>` : "";
 
-    function renderImagesHtml(urlsArray, fallbackSingleStr) {
-      const arr = urlsArray || (fallbackSingleStr ? [fallbackSingleStr] : []);
-      return arr.map(url => `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`).join("");
-    }
-
     let contentHtml = "";
-    const imgHtml = renderImagesHtml(sub.screenshotUrls, sub.screenshotUrl);
-    const chartImgHtml = renderImagesHtml(sub.chartImageUrls, sub.chartImageUrl);
+    
+    // Safely handle both single and multiple image arrays
+    const allScreenshots = Array.isArray(sub.screenshotUrls) ? sub.screenshotUrls : (sub.screenshotUrl ? [sub.screenshotUrl] : []);
+    const imgHtml = allScreenshots.map(url => `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`).join("");
+
+    const allCharts = Array.isArray(sub.chartImageUrls) ? sub.chartImageUrls : (sub.chartImageUrl ? [sub.chartImageUrl] : []);
+    const chartImgHtml = allCharts.map(url => `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Task 1 Chart" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`).join("");
 
     if (sub.skill === "reading" || sub.skill === "listening") {
       const mistakesSummary = Object.entries(sub.mistakeCounts || {}).filter(([, count]) => count > 0).map(([type, count]) => `<span class="q-tag">${MISTAKE_LABELS[type] || type}: ${count} wrong</span>`).join(" ");
@@ -2079,7 +2079,7 @@ window.openAnalysisPage = function (assignmentId) {
   document.getElementById("ana-band-score").textContent = sub.bandScore ? `Band ${sub.bandScore}` : "Practice Drill";
   document.getElementById("ana-accuracy").textContent = `${pct}%`;
 
-  const allImgs = sub.screenshotUrls || (sub.screenshotUrl ? [sub.screenshotUrl] : []);
+  const allImgs = Array.isArray(sub.screenshotUrls) ? sub.screenshotUrls : (sub.screenshotUrl ? [sub.screenshotUrl] : []);
   document.getElementById("ana-screenshot-box").innerHTML = allImgs.length > 0
     ? allImgs.map(url => `<a href="${url}" target="_blank"><img src="${url}" alt="Result Screenshot" style="width:100%;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;" /></a>`).join("")
     : `<p class="muted">No screenshot attached.</p>`;
