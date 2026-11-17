@@ -1696,7 +1696,9 @@ function renderAssignmentsList() {
   const container = document.getElementById("assignments-list-container");
   if (!container) return;
   const now = new Date();
+  
   const todoList = [];
+  const missedList = [];
   const doneList = [];
 
   let fallbackWeek = "Current Assignments";
@@ -1726,21 +1728,37 @@ function renderAssignmentsList() {
 
   allAssignments.forEach((hw) => {
     const isSub = studentSubmissionsMap[hw.id] || hw.status === "submitted" || hw.status === "verified";
-    if (isSub) doneList.push(hw);
-    else todoList.push(hw);
+    const isPastDue = now > new Date(hw.dueDate);
+    
+    if (isSub) {
+      doneList.push(hw);
+    } else if (isPastDue) {
+      missedList.push(hw);
+    } else {
+      todoList.push(hw);
+    }
   });
 
+  // Adding the middle "Missed" button
   const filterControls = `
-    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px;">
-      <button class="btn ${hwViewFilter === "todo" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-todo">To Do (${todoList.length})</button>
-      <button class="btn ${hwViewFilter === "completed" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-done">Completed & Graded (${doneList.length})</button>
+    <div style="display:flex;gap:8px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:12px;overflow-x:auto;">
+      <button class="btn ${hwViewFilter === "todo" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-todo" style="white-space:nowrap;">To Do (${todoList.length})</button>
+      <button class="btn ${hwViewFilter === "missed" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-missed" style="white-space:nowrap;${hwViewFilter !== 'missed' && missedList.length > 0 ? 'color:var(--danger);border-color:#fecaca;' : ''}">Missed (${missedList.length})</button>
+      <button class="btn ${hwViewFilter === "completed" ? "btn-primary" : "btn-outline"} btn-sm" id="btn-hw-done" style="white-space:nowrap;">Completed (${doneList.length})</button>
     </div>
   `;
 
-  const activeList = hwViewFilter === "todo" ? todoList : doneList;
+  const activeList = hwViewFilter === "todo" ? todoList : hwViewFilter === "missed" ? missedList : doneList;
+  
   if (activeList.length === 0) {
-    container.innerHTML = filterControls + `<p class="muted center" style="padding:24px 0;">${hwViewFilter === "todo" ? "🎉 All assignments completed!" : "No completed assignments yet."}</p>`;
+    let emptyMsg = "";
+    if (hwViewFilter === "todo") emptyMsg = "🎉 All caught up on current tasks!";
+    else if (hwViewFilter === "missed") emptyMsg = "✅ Excellent! You have no missed assignments.";
+    else emptyMsg = "No completed assignments yet.";
+
+    container.innerHTML = filterControls + `<p class="muted center" style="padding:24px 0;">${emptyMsg}</p>`;
     document.getElementById("btn-hw-todo")?.addEventListener("click", () => { hwViewFilter = "todo"; renderAssignmentsList(); });
+    document.getElementById("btn-hw-missed")?.addEventListener("click", () => { hwViewFilter = "missed"; renderAssignmentsList(); });
     document.getElementById("btn-hw-done")?.addEventListener("click", () => { hwViewFilter = "completed"; renderAssignmentsList(); });
     return;
   }
@@ -1775,7 +1793,7 @@ function renderAssignmentsList() {
         else actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
       } else {
         statusBadge = isPastDue ? `<span class="badge badge-gray">Missing (Past Due)</span>` : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
-        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit</button>`;
+        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Late</button>`;
       }
 
       return `
@@ -1797,6 +1815,7 @@ function renderAssignmentsList() {
 
   container.innerHTML = filterControls + groupsHtml;
   document.getElementById("btn-hw-todo")?.addEventListener("click", () => { hwViewFilter = "todo"; renderAssignmentsList(); });
+  document.getElementById("btn-hw-missed")?.addEventListener("click", () => { hwViewFilter = "missed"; renderAssignmentsList(); });
   document.getElementById("btn-hw-done")?.addEventListener("click", () => { hwViewFilter = "completed"; renderAssignmentsList(); });
 }
 
