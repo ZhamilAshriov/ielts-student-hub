@@ -4,7 +4,8 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
-  signOut
+  signOut,
+  updatePassword
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
   getFirestore,
@@ -193,6 +194,39 @@ loginForm.addEventListener("submit", async (e) => {
 });
 
 document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+const changePassForm = document.getElementById("change-password-form");
+if (changePassForm) {
+  changePassForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const newPass = document.getElementById("new-pass-input").value;
+    const btn = document.getElementById("change-pass-btn");
+    const msg = document.getElementById("change-pass-msg");
+
+    btn.disabled = true;
+    btn.textContent = "Updating...";
+    msg.textContent = "";
+
+    try {
+      const user = auth.currentUser;
+      if (!user) throw new Error("No user logged in.");
+      await updatePassword(user, newPass);
+      msg.style.color = "var(--success)";
+      msg.textContent = "Password updated successfully!";
+      changePassForm.reset();
+    } catch (err) {
+      msg.style.color = "var(--danger)";
+      if (err.code === "auth/requires-recent-login") {
+        msg.textContent = "Security check: Please log out and log back in, then try changing your password again.";
+      } else {
+        msg.textContent = err.message;
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Update Password";
+    }
+  });
+}
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
