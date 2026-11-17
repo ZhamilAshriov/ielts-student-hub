@@ -2095,43 +2095,6 @@ window.openAnalysisPage = function (assignmentId) {
     : `<p class="muted">No specific question-type mistakes logged for this test.</p>`;
 };
 
-async function submitWritingHomework(hw) {
-  const text = document.getElementById("writing-essay-input").value.trim();
-  const chartFile = document.getElementById("writing-chart-file")?.files[0];
-  if (!text) return alert("Please write your essay or report before submitting.");
-  if ((hw.id === "HW-05" || hw.isTask1) && !chartFile) return alert("Please upload an image of the line graph you wrote about.");
-
-  const btn = document.getElementById("submit-writing-btn");
-  btn.disabled = true; btn.textContent = "Submitting...";
-
-  try {
-    let chartImageUrl = null;
-    if (chartFile) {
-      const formData = new FormData(); formData.append("file", chartFile); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (!data.secure_url) throw new Error(data.error?.message || "Chart image upload failed");
-      chartImageUrl = data.secure_url;
-    }
-    const isLate = new Date() > new Date(hw.dueDate);
-    const submissionData = {
-      assignmentId: hw.id, studentId: currentStudentId, skill: "writing", status: "submitted", isLate, submittedAt: serverTimestamp(),
-      essayText: text, wordCount: text.split(/\s+/).filter(Boolean).length, chartImageUrl
-    };
-
-    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
-    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
-    
-    studentSubmissionsMap[hw.id] = submissionData;
-    updateDashboardUI();
-    alert("Writing submitted successfully!");
-    showHomeworkListView();
-  } catch (err) {
-    alert("Submission error: " + err.message);
-    btn.disabled = false; btn.textContent = "Submit Writing";
-  }
-}
-
 window.startBrowserRecording = async function () {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
