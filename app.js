@@ -222,8 +222,10 @@ onAuthStateChanged(auth, async (user) => {
     document.getElementById("student-nav").classList.remove("hidden");
     document.getElementById("teacher-nav").classList.add("hidden");
     switchView("student-dashboard");
+    
+    // FIX: Process the QR Code instantly before downloading heavy dashboard data!
+    await handleUrlCheckInToken(); 
     await initStudentData();
-    await handleUrlCheckInToken();
   }
 });
 
