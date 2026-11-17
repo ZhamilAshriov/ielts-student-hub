@@ -1390,7 +1390,7 @@ function getDynamicRunnerHTML(task, type) {
     rightHtml = `
       <h3>Submit Score & Screenshot</h3>
       <div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="dynamic-lr-score" min="0" max="${totalQ}" required /></div>
-      <div class="form-group"><label>Result Screenshot (PNG / JPG)</label><input type="file" id="dynamic-lr-file" accept="image/*" multiple" required /></div>
+      <div class="form-group"><label>Result Screenshot (PNG / JPG)</label><input type="file" id="dynamic-lr-file" accept="image/*" multiple required /></div>
       <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
       <button class="btn btn-primary btn-full" onclick="submitDynamicScreenshot(${totalQ})">Upload Screenshot & Submit Proof</button>
     `;
@@ -1410,7 +1410,7 @@ function getDynamicRunnerHTML(task, type) {
     `;
   } else if (task.skill === "writing") {
     const isTask1 = task.details?.taskType === "task1";
-    const chartHtml = isTask1 ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="dynamic-w-img" accept="image/*" multiple" required /></div>` : "";
+    const chartHtml = isTask1 ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="dynamic-w-img" accept="image/*" multiple required /></div>` : "";
     rightHtml = `
       <h3>Your Essay / Report Response</h3>
       ${chartHtml}
@@ -1420,14 +1420,14 @@ function getDynamicRunnerHTML(task, type) {
   } else if (task.skill === "grammar") {
     rightHtml = `
       <h3>Upload Completed Pages</h3>
-      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="dynamic-gram-file" accept="image/*" multiple" required /></div>
+      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="dynamic-gram-file" accept="image/*" multiple required /></div>
       <div class="form-group"><label>Student Notes / Questions (Optional)</label><input type="text" id="dynamic-gram-notes" /></div>
       <button class="btn btn-primary btn-full" onclick="submitDynamicGrammar()">Upload & Submit Homework</button>
     `;
   } else {
     rightHtml = `
       <h3>Submit Task Response</h3>
-      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="dynamic-other-file" accept="image/*" multiple" /></div>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="dynamic-other-file" accept="image/*" multiple /></div>
       <div class="form-group"><label>Type your answer or notes here</label><textarea id="dynamic-response-input" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
       <button class="btn btn-primary btn-full" onclick="submitDynamicCustom()">Submit Task</button>
     `;
@@ -1831,7 +1831,7 @@ window.startAssignment = function (assignmentId) {
             <input type="number" class="drill-total-input" data-type="${item.key}" min="0" placeholder="Total" style="width:84px;padding:6px 8px;text-align:center;" required />
           </div>
         </div>`).join("");
-      rightPane.innerHTML = `<h3>Submit Drill Score</h3><div class="form-group"><label>Upload Result Screenshot</label><input type="file" id="lr-screenshot-file" accept="image/*" multiple" required /></div>
+      rightPane.innerHTML = `<h3>Submit Drill Score</h3><div class="form-group"><label>Upload Result Screenshot</label><input type="file" id="lr-screenshot-file" accept="image/*" multiple required /></div>
         <div class="form-group"><label>Score Breakdown</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 14px;">${drillRowsHtml}</div></div>
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Drill</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
@@ -1849,13 +1849,13 @@ window.startAssignment = function (assignmentId) {
           <input type="number" class="mistake-type-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
         </div>`).join("");
       rightPane.innerHTML = `<h3>Submit Score</h3><div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="lr-raw-score" min="0" max="${totalQ}" required /></div>
-        <div class="form-group"><label>Upload Result Screenshot</label><input type="file" id="lr-screenshot-file" accept="image/*" multiple" required /></div>
+        <div class="form-group"><label>Upload Result Screenshot</label><input type="file" id="lr-screenshot-file" accept="image/*" multiple required /></div>
         <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
         <button class="btn btn-primary btn-full" id="submit-lr-btn">Upload Screenshot & Submit Score</button>`;
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
     }
   } else if (hw.skill === "writing") {
-    const chartHtml = hw.isTask1 || hw.id === "HW-05" ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" multiple" required /></div>` : "";
+    const chartHtml = hw.isTask1 || hw.id === "HW-05" ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" multiple required /></div>` : "";
     leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.promptText || hw.title)}</p>`;
     rightPane.innerHTML = `<h3>Your Essay / Report Response</h3>
       ${chartHtml}
@@ -1881,7 +1881,7 @@ window.startAssignment = function (assignmentId) {
     leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
     rightPane.innerHTML = `
       <h3>Upload Completed Pages</h3>
-      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="gram-file" accept="image/*" multiple" required /></div>
+      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="gram-file" accept="image/*" multiple required /></div>
       <div class="form-group"><label>Student Notes / Questions (Optional)</label><input type="text" id="gram-notes" /></div>
       <button class="btn btn-primary btn-full" id="submit-gram-btn">Upload & Submit Homework</button>
     `;
@@ -1890,7 +1890,7 @@ window.startAssignment = function (assignmentId) {
     leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
     rightPane.innerHTML = `
       <h3>Submit Task Response</h3>
-      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" multiple" /></div>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" multiple /></div>
       <div class="form-group"><label>Type your answer or notes here</label><textarea id="other-notes" rows="8" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
       <button class="btn btn-primary btn-full" id="submit-other-btn">Submit Task</button>
     `;
@@ -1963,6 +1963,94 @@ async function submitScreenshotHomework(hw) {
   } catch (err) {
     alert("Upload error: " + err.message);
     btn.disabled = false; btn.textContent = isDrill ? "Upload Screenshot & Submit Drill" : "Upload Screenshot & Submit Score";
+  }
+}
+
+async function submitWritingHomework(hw) {
+  const text = document.getElementById("writing-essay-input").value.trim();
+  const fileInput = document.getElementById("writing-chart-file");
+  if (!text) return alert("Please write your essay or report before submitting.");
+  if ((hw.id === "HW-05" || hw.isTask1) && !fileInput?.files.length) return alert("Please upload an image of the line graph you wrote about.");
+
+  const btn = document.getElementById("submit-writing-btn");
+  btn.disabled = true; btn.textContent = "Submitting...";
+
+  try {
+    const urls = await uploadMultipleFiles("writing-chart-file");
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "writing", status: "submitted", isLate, submittedAt: serverTimestamp(),
+      essayText: text, wordCount: text.split(/\s+/).filter(Boolean).length, chartImageUrls: urls
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Writing submitted successfully!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    btn.disabled = false; btn.textContent = "Submit Writing";
+  }
+}
+
+async function submitGrammarHomework(hw) {
+  const fileInput = document.getElementById("gram-file");
+  const notes = document.getElementById("gram-notes").value.trim();
+  if (!fileInput.files.length) return alert("Please select photos of your completed grammar pages.");
+
+  const btn = document.getElementById("submit-gram-btn");
+  btn.disabled = true; btn.textContent = "Uploading images...";
+
+  try {
+    const urls = await uploadMultipleFiles("gram-file");
+    if (!urls) throw new Error("Image upload failed");
+
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "grammar", status: "submitted", isLate, submittedAt: serverTimestamp(), screenshotUrls: urls, notes
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Grammar homework uploaded!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Upload error: " + err.message);
+    btn.disabled = false; btn.textContent = "Upload & Submit Grammar Homework";
+  }
+}
+
+async function submitOtherHomework(hw) {
+  const notes = document.getElementById("other-notes").value.trim();
+  const fileInput = document.getElementById("other-file");
+  if (!notes && !fileInput?.files.length) return alert("Please enter notes or attach a file before submitting.");
+  
+  const btn = document.getElementById("submit-other-btn");
+  btn.disabled = true; btn.textContent = fileInput?.files.length ? "Uploading images..." : "Submitting...";
+
+  try {
+    const urls = await uploadMultipleFiles("other-file");
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "other", status: "submitted", isLate, submittedAt: serverTimestamp(), notes, screenshotUrls: urls
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Task submitted successfully!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    btn.disabled = false; btn.textContent = "Submit Task";
   }
 }
 
@@ -2120,74 +2208,6 @@ window.submitSpeakingHomework = async function (assignmentId) {
   }
 };
 
-async function submitGrammarHomework(hw) {
-  const file = document.getElementById("gram-file").files[0];
-  const notes = document.getElementById("gram-notes").value.trim();
-  if (!file) return alert("Please select a photo or screenshot of your completed grammar pages.");
-
-  const btn = document.getElementById("submit-gram-btn");
-  btn.disabled = true; btn.textContent = "Uploading image...";
-
-  try {
-    const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
-
-    const isLate = new Date() > new Date(hw.dueDate);
-    const submissionData = {
-      assignmentId: hw.id, studentId: currentStudentId, skill: "grammar", status: "submitted", isLate, submittedAt: serverTimestamp(), screenshotUrl: data.secure_url, notes
-    };
-
-    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
-    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
-    
-    studentSubmissionsMap[hw.id] = submissionData;
-    updateDashboardUI();
-    alert("Grammar homework uploaded!");
-    showHomeworkListView();
-  } catch (err) {
-    alert("Upload error: " + err.message);
-    btn.disabled = false; btn.textContent = "Upload & Submit Grammar Homework";
-  }
-}
-
-async function submitOtherHomework(hw) {
-  const notes = document.getElementById("other-notes").value.trim();
-  const file = document.getElementById("other-file")?.files[0];
-  if (!notes && !file) return alert("Please enter notes or attach a file before submitting.");
-  
-  const btn = document.getElementById("submit-other-btn");
-  btn.disabled = true; btn.textContent = file ? "Uploading image..." : "Submitting...";
-
-  try {
-    let screenshotUrl = null;
-    if (file) {
-      const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-      const data = await res.json();
-      if (!data.secure_url) throw new Error(data.error?.message || "Image upload failed");
-      screenshotUrl = data.secure_url;
-    }
-
-    const isLate = new Date() > new Date(hw.dueDate);
-    const submissionData = {
-      assignmentId: hw.id, studentId: currentStudentId, skill: "other", status: "submitted", isLate, submittedAt: serverTimestamp(), notes, screenshotUrl
-    };
-
-    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
-    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
-    
-    studentSubmissionsMap[hw.id] = submissionData;
-    updateDashboardUI();
-    alert("Task submitted successfully!");
-    showHomeworkListView();
-  } catch (err) {
-    alert("Submission error: " + err.message);
-    btn.disabled = false; btn.textContent = "Submit Task";
-  }
-}
-
 // ==========================================
 // STUDENT PUNISHMENTS & EXTRAS WORKFLOW
 // ==========================================
@@ -2261,11 +2281,11 @@ window.startPunishmentRunner = async function(id) {
     rightPane.innerHTML = `
       <h3>Submit Score & Screenshot</h3>
       <div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="pun-lr-score" min="0" max="${totalQ}" required /></div>
-      <div class="form-group"><label>Result Screenshot</label><input type="file" id="pun-lr-file" accept="image/*" multiple" required /></div>
+      <div class="form-group"><label>Result Screenshot</label><input type="file" id="pun-lr-file" accept="image/*" multiple required /></div>
       <button class="btn btn-primary btn-full" onclick="submitPunishmentScreenshot(${totalQ})">Submit Score</button>
     `;
   } else if (activePunishment.skill === "writing") {
-    const chartHtml = isTask1 ? `<div class="form-group"><label>Upload Line Graph / Chart Image</label><input type="file" id="pun-w-img" accept="image/*" multiple" required /></div>` : "";
+    const chartHtml = isTask1 ? `<div class="form-group"><label>Upload Line Graph / Chart Image</label><input type="file" id="pun-w-img" accept="image/*" multiple required /></div>` : "";
     rightPane.innerHTML = `
       <h3>Your Essay Response</h3>
       ${chartHtml}
@@ -2289,14 +2309,14 @@ window.startPunishmentRunner = async function(id) {
   } else if (activePunishment.skill === "grammar") {
     rightPane.innerHTML = `
       <h3>Upload Completed Pages</h3>
-      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="pun-gram-file" accept="image/*" multiple" required /></div>
+      <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="pun-gram-file" accept="image/*" multiple required /></div>
       <div class="form-group"><label>Student Notes (Optional)</label><input type="text" id="pun-gram-notes" /></div>
       <button class="btn btn-primary btn-full" onclick="submitPunishmentGrammar()">Upload & Submit</button>
     `;
   } else {
     rightPane.innerHTML = `
       <h3>Submit Work</h3>
-      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="pun-other-file" accept="image/*" multiple" /></div>
+      <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="pun-other-file" accept="image/*" multiple /></div>
       <div class="form-group"><label>Type your answer or notes here</label><textarea id="pun-note-input" rows="8" style="width:100%;padding:10px;border-radius:8px;"></textarea></div>
       <button class="btn btn-primary btn-full" onclick="submitPunishmentNote()">Submit Task</button>
     `;
