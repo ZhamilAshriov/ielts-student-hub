@@ -1610,7 +1610,7 @@ window.submitDynamicAudio = async function () {
 window.submitDynamicGrammar = async function() {
   const fileInput = document.getElementById("dynamic-gram-file");
   const notes = document.getElementById("dynamic-gram-notes").value.trim();
-  if (!fileInput.files.length) return alert("Please upload photos of your workbook.");
+  if (!fileInput?.files?.length) return alert("Please upload photos of your workbook.");
 
   const urls = await uploadMultipleFiles("dynamic-gram-file");
 
