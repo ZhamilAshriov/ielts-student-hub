@@ -779,20 +779,39 @@ function renderTeacherHwMatrix(students, submissions) {
     container.innerHTML = `<p class="muted center">No students in roster yet.</p>`;
     return;
   }
-  const weeks = [...new Set(ASSIGNMENTS.map((a) => a.week || "General"))];
+  
+  // Merge static assignments and dynamic custom homework into one list for the matrix
+  const allAssignments = [
+    ...ASSIGNMENTS,
+    ...cachedTeacherHw.map(t => ({
+      id: t.id,
+      title: t.title || t.reason,
+      skill: t.skill,
+      dueDate: t.dueDate,
+      week: t.week || "Custom Assignments"
+    }))
+  ];
+
+  const weeks = [...new Set(allAssignments.map((a) => a.week || "General"))];
+  
   if (selectedMatrixWeek === "ALL" && weeks.length > 0) {
     selectedMatrixWeek = weeks[weeks.length - 1];
   }
-  const filteredAssignments = selectedMatrixWeek === "ALL_SHOW" ? ASSIGNMENTS : ASSIGNMENTS.filter((a) => (a.week || "General") === selectedMatrixWeek);
+  
+  const filteredAssignments = selectedMatrixWeek === "ALL_SHOW" 
+    ? allAssignments 
+    : allAssignments.filter((a) => (a.week || "General") === selectedMatrixWeek);
+    
   const filterBar = `
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
       <label style="margin:0;white-space:nowrap;">Filter by Week:</label>
       <select id="matrix-week-select" style="max-width:260px;padding:6px 10px;">
         ${weeks.map((w) => `<option value="${escapeHtml(w)}" ${selectedMatrixWeek === w ? "selected" : ""}>${escapeHtml(w)}</option>`).join("")}
-        <option value="ALL_SHOW" ${selectedMatrixWeek === "ALL_SHOW" ? "selected" : ""}>Show All Weeks (${ASSIGNMENTS.length})</option>
+        <option value="ALL_SHOW" ${selectedMatrixWeek === "ALL_SHOW" ? "selected" : ""}>Show All Weeks (${allAssignments.length})</option>
       </select>
     </div>
   `;
+  
   const now = new Date();
   const headers = filteredAssignments.map((a) => `<th>${a.id}<br><span style="font-weight:400;font-size:11px;">${a.skill.toUpperCase()}</span></th>`).join("");
   const rows = students.map((s) => {
