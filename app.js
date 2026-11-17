@@ -842,33 +842,40 @@ function renderTeacherGradingQueue(students, submissions) {
       : `<span class="badge badge-yellow">Needs Review</span>`;
     const lateBadge = sub.isLate ? `<span class="badge badge-red">Late</span>` : "";
 
+    function renderImagesHtml(urlsArray, fallbackSingleStr) {
+      const arr = urlsArray || (fallbackSingleStr ? [fallbackSingleStr] : []);
+      return arr.map(url => `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`).join("");
+    }
+
     let contentHtml = "";
+    const imgHtml = renderImagesHtml(sub.screenshotUrls, sub.screenshotUrl);
+    const chartImgHtml = renderImagesHtml(sub.chartImageUrls, sub.chartImageUrl);
+
     if (sub.skill === "reading" || sub.skill === "listening") {
       const mistakesSummary = Object.entries(sub.mistakeCounts || {}).filter(([, count]) => count > 0).map(([type, count]) => `<span class="q-tag">${MISTAKE_LABELS[type] || type}: ${count} wrong</span>`).join(" ");
       contentHtml = `
         <div style="margin:10px 0;">
           <p style="font-size:14px;margin-bottom:8px;"><strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} ${sub.bandScore ? `(Auto Band ${sub.bandScore})` : `(Drill — Weakest Areas Only)`}</p>
           ${mistakesSummary ? `<div style="margin-bottom:10px;">${mistakesSummary}</div>` : ""}
-          ${sub.screenshotUrl ? `<a href="${sub.screenshotUrl}" target="_blank" rel="noopener"><img src="${sub.screenshotUrl}" alt="Score Screenshot" style="max-width:100%;max-height:280px;border:1px solid var(--border);border-radius:8px;" /></a>` : ""}
+          <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
         </div>
       `;
     } else if (sub.skill === "writing") {
-      const chartHtml = sub.chartImageUrl ? `<div style="margin:10px 0;"><a href="${sub.chartImageUrl}" target="_blank" rel="noopener"><img src="${sub.chartImageUrl}" alt="Task 1 Graph" style="max-width:100%;max-height:260px;border:1px solid var(--border);border-radius:8px;" /></a></div>` : "";
-      contentHtml = `${chartHtml}<div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>`;
+      contentHtml = `<div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div><div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>`;
     } else if (sub.skill === "speaking") {
       contentHtml = `<div style="margin:12px 0;"><audio controls src="${sub.audioUrl}" style="width:100%;"></audio></div>`;
     } else if (sub.skill === "grammar") {
       contentHtml = `
         <div style="margin:10px 0;">
           ${sub.notes ? `<p style="font-size:14px;margin-bottom:8px;"><strong>Student Note:</strong> ${escapeHtml(sub.notes)}</p>` : ""}
-          ${sub.screenshotUrl ? `<a href="${sub.screenshotUrl}" target="_blank" rel="noopener"><img src="${sub.screenshotUrl}" alt="Grammar Work" style="max-width:100%;max-height:280px;border:1px solid var(--border);border-radius:8px;" /></a>` : ""}
+          <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
         </div>
       `;
     } else if (sub.skill === "other") {
       contentHtml = `
         <div style="margin:10px 0;">
           <p style="font-size:14px;white-space:pre-line;margin-bottom:8px;">${escapeHtml(sub.notes || sub.responseText || "")}</p>
-          ${sub.screenshotUrl ? `<a href="${sub.screenshotUrl}" target="_blank" rel="noopener"><img src="${sub.screenshotUrl}" alt="Attached Work" style="max-width:100%;max-height:280px;border:1px solid var(--border);border-radius:8px;" /></a>` : ""}
+          <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
         </div>
       `;
     }
@@ -1485,14 +1492,26 @@ window.startPunishmentRunner = async function (taskId) {
   document.getElementById("pun-runner-right").innerHTML = getDynamicRunnerHTML(activeDynamicTask, "punishment");
 };
 
+async function uploadMultipleFiles(fileInputId) {
+  const files = document.getElementById(fileInputId)?.files;
+  if (!files || files.length === 0) return null;
+  const urls = [];
+  for (let i = 0; i < files.length; i++) {
+    const formData = new FormData(); formData.append("file", files[i]); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+    const data = await res.json();
+    if (data.secure_url) urls.push(data.secure_url);
+  }
+  return urls;
+}
+
 window.submitDynamicScreenshot = async function(totalQ) {
-  const file = document.getElementById("dynamic-lr-file").files[0];
+  const fileInput = document.getElementById("dynamic-lr-file");
   const rawScore = Number(document.getElementById("dynamic-lr-score").value);
-  if (!file || isNaN(rawScore)) return alert("Please enter your score and attach a screenshot.");
+  if (!fileInput.files.length || isNaN(rawScore)) return alert("Please enter your score and attach a screenshot.");
 
   const mistakeCounts = {};
   const updatedMistakes = { ...(currentStudentProfile.permanentMistakes || {}) };
-  
   document.querySelectorAll(".dynamic-mistake-input").forEach((inp) => {
     const type = inp.dataset.type;
     const wrongNum = Math.max(0, Number(inp.value) || 0);
@@ -1500,24 +1519,22 @@ window.submitDynamicScreenshot = async function(totalQ) {
     if (wrongNum > 0) updatedMistakes[type] = { wrong: (updatedMistakes[type]?.wrong || 0) + wrongNum };
   });
 
-  const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-  const data = await res.json();
-  if (!data.secure_url) return alert("Upload failed.");
+  const urls = await uploadMultipleFiles("dynamic-lr-file");
+  if (!urls) return alert("Upload failed.");
 
   await updateDoc(doc(db, "users", currentStudentId), { permanentMistakes: updatedMistakes });
   currentStudentProfile.permanentMistakes = updatedMistakes;
 
   const submissionData = {
     status: "submitted",
-    submission: { scoreText: `${rawScore} / ${totalQ}`, screenshotUrl: data.secure_url, mistakeCounts },
+    submission: { scoreText: `${rawScore} / ${totalQ}`, screenshotUrls: urls, mistakeCounts },
     submittedAt: serverTimestamp()
   };
 
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: activeDynamicTask.skill, status: "submitted",
     isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(),
-    rawScore, totalQuestions: totalQ, screenshotUrl: data.secure_url, mistakeCounts
+    rawScore, totalQuestions: totalQ, screenshotUrls: urls, mistakeCounts
   });
 
   await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), submissionData);
@@ -1536,24 +1553,19 @@ window.submitDynamicScreenshot = async function(totalQ) {
 
 window.submitDynamicWriting = async function(isTask1) {
   const text = document.getElementById("dynamic-w-text").value.trim();
-  const imgFile = document.getElementById("dynamic-w-img")?.files[0];
+  const fileInput = document.getElementById("dynamic-w-img");
   if (!text) return alert("Please type your response.");
-  if (isTask1 && !imgFile) return alert("Please upload your chart.");
+  if (isTask1 && !fileInput?.files.length) return alert("Please upload your chart.");
 
-  let chartUrl = null;
-  if (imgFile) {
-    const formData = new FormData(); formData.append("file", imgFile); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    chartUrl = data.secure_url;
-  }
+  const urls = await uploadMultipleFiles("dynamic-w-img");
 
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "writing", status: "submitted",
-    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), essayText: text, chartImageUrl: chartUrl
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), essayText: text, chartImageUrls: urls
   });
 
-  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { text }, submittedAt: serverTimestamp() });
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { text, chartImageUrls: urls }, submittedAt: serverTimestamp() });
+  
   alert("Writing submitted successfully!");
   if (activeDynamicCollection === "customAssignments") {
     studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
@@ -1596,20 +1608,18 @@ window.submitDynamicAudio = async function () {
 };
 
 window.submitDynamicGrammar = async function() {
-  const file = document.getElementById("dynamic-gram-file").files[0];
+  const fileInput = document.getElementById("dynamic-gram-file");
   const notes = document.getElementById("dynamic-gram-notes").value.trim();
-  if (!file) return alert("Please upload a photo of your workbook.");
+  if (!fileInput.files.length) return alert("Please upload photos of your workbook.");
 
-  const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-  const data = await res.json();
+  const urls = await uploadMultipleFiles("dynamic-gram-file");
 
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "grammar", status: "submitted",
-    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), screenshotUrl: data.secure_url, notes
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), screenshotUrls: urls, notes
   });
 
-  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { screenshotUrl: data.secure_url }, submittedAt: serverTimestamp() });
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { screenshotUrls: urls }, submittedAt: serverTimestamp() });
   
   alert("Grammar uploaded successfully!");
   if (activeDynamicCollection === "customAssignments") {
@@ -1625,23 +1635,17 @@ window.submitDynamicGrammar = async function() {
 
 window.submitDynamicCustom = async function() {
   const text = document.getElementById("dynamic-response-input").value.trim();
-  const file = document.getElementById("dynamic-other-file")?.files[0];
-  if (!text && !file) return alert("Please enter your response or attach a file.");
+  const fileInput = document.getElementById("dynamic-other-file");
+  if (!text && !fileInput?.files.length) return alert("Please enter your response or attach files.");
 
-  let screenshotUrl = null;
-  if (file) {
-    const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    screenshotUrl = data.secure_url;
-  }
+  const urls = await uploadMultipleFiles("dynamic-other-file");
 
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "other", status: "submitted",
-    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), notes: text, screenshotUrl
+    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), notes: text, screenshotUrls: urls
   });
 
-  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { responseText: text, screenshotUrl }, submittedAt: serverTimestamp() });
+  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { responseText: text, screenshotUrls: urls }, submittedAt: serverTimestamp() });
   
   alert("Task submitted successfully!");
   if (activeDynamicCollection === "customAssignments") {
@@ -1894,11 +1898,10 @@ window.startAssignment = function (assignmentId) {
   }
 };
 
-// --- Submission Handlers (Shared) ---
 async function submitScreenshotHomework(hw) {
   const isDrill = Boolean(hw.isDrill);
-  const file = document.getElementById("lr-screenshot-file").files[0];
-  if (!file) return alert("Please attach a screenshot of your test result.");
+  const fileInput = document.getElementById("lr-screenshot-file");
+  if (!fileInput.files.length) return alert("Please attach your result screenshots.");
 
   let rawVal = 0; let totalQ = hw.totalQuestions || 40;
   const mistakeCounts = {}; const drillBreakdown = {};
@@ -1932,25 +1935,21 @@ async function submitScreenshotHomework(hw) {
   }
 
   const btn = document.getElementById("submit-lr-btn");
-  btn.disabled = true; btn.textContent = "Uploading screenshot...";
+  btn.disabled = true; btn.textContent = "Uploading screenshots...";
 
   try {
-    const formData = new FormData(); formData.append("file", file); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    if (!data.secure_url) throw new Error(data.error?.message || "Screenshot upload failed");
+    const urls = await uploadMultipleFiles("lr-screenshot-file");
+    if (!urls) throw new Error("Screenshot upload failed");
 
     const isRealPracticeTest = !isDrill && totalQ === 40;
     const bandScore = isRealPracticeTest ? rawToIeltsBand(rawVal, 40) : null;
     const isLate = new Date() > new Date(hw.dueDate);
     const submissionData = {
       assignmentId: hw.id, studentId: currentStudentId, skill: hw.skill, isDrill: !isRealPracticeTest, status: "submitted", isLate, submittedAt: serverTimestamp(),
-      rawScore: rawVal, totalQuestions: totalQ, bandScore, screenshotUrl: data.secure_url, mistakeCounts, drillBreakdown
+      rawScore: rawVal, totalQuestions: totalQ, bandScore, screenshotUrls: urls, mistakeCounts, drillBreakdown
     };
 
-    if (hw.isDynamic) {
-      await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
-    }
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
 
     await Promise.all([
       setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData),
@@ -1964,6 +1963,94 @@ async function submitScreenshotHomework(hw) {
   } catch (err) {
     alert("Upload error: " + err.message);
     btn.disabled = false; btn.textContent = isDrill ? "Upload Screenshot & Submit Drill" : "Upload Screenshot & Submit Score";
+  }
+}
+
+async function submitWritingHomework(hw) {
+  const text = document.getElementById("writing-essay-input").value.trim();
+  const fileInput = document.getElementById("writing-chart-file");
+  if (!text) return alert("Please write your essay or report before submitting.");
+  if ((hw.id === "HW-05" || hw.isTask1) && !fileInput?.files.length) return alert("Please upload an image of the line graph you wrote about.");
+
+  const btn = document.getElementById("submit-writing-btn");
+  btn.disabled = true; btn.textContent = "Submitting...";
+
+  try {
+    const urls = await uploadMultipleFiles("writing-chart-file");
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "writing", status: "submitted", isLate, submittedAt: serverTimestamp(),
+      essayText: text, wordCount: text.split(/\s+/).filter(Boolean).length, chartImageUrls: urls
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Writing submitted successfully!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    btn.disabled = false; btn.textContent = "Submit Writing";
+  }
+}
+
+async function submitGrammarHomework(hw) {
+  const fileInput = document.getElementById("gram-file");
+  const notes = document.getElementById("gram-notes").value.trim();
+  if (!fileInput.files.length) return alert("Please select photos of your completed grammar pages.");
+
+  const btn = document.getElementById("submit-gram-btn");
+  btn.disabled = true; btn.textContent = "Uploading images...";
+
+  try {
+    const urls = await uploadMultipleFiles("gram-file");
+    if (!urls) throw new Error("Image upload failed");
+
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "grammar", status: "submitted", isLate, submittedAt: serverTimestamp(), screenshotUrls: urls, notes
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Grammar homework uploaded!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Upload error: " + err.message);
+    btn.disabled = false; btn.textContent = "Upload & Submit Grammar Homework";
+  }
+}
+
+async function submitOtherHomework(hw) {
+  const notes = document.getElementById("other-notes").value.trim();
+  const fileInput = document.getElementById("other-file");
+  if (!notes && !fileInput?.files.length) return alert("Please enter notes or attach a file before submitting.");
+  
+  const btn = document.getElementById("submit-other-btn");
+  btn.disabled = true; btn.textContent = fileInput?.files.length ? "Uploading images..." : "Submitting...";
+
+  try {
+    const urls = await uploadMultipleFiles("other-file");
+    const isLate = new Date() > new Date(hw.dueDate);
+    const submissionData = {
+      assignmentId: hw.id, studentId: currentStudentId, skill: "other", status: "submitted", isLate, submittedAt: serverTimestamp(), notes, screenshotUrls: urls
+    };
+
+    if (hw.isDynamic) await updateDoc(doc(db, "customAssignments", hw.id), { status: "submitted" });
+    await setDoc(doc(db, "submissions", `${hw.id}_${currentStudentId}`), submissionData);
+    
+    studentSubmissionsMap[hw.id] = submissionData;
+    updateDashboardUI();
+    alert("Task submitted successfully!");
+    showHomeworkListView();
+  } catch (err) {
+    alert("Submission error: " + err.message);
+    btn.disabled = false; btn.textContent = "Submit Task";
   }
 }
 
@@ -1992,10 +2079,11 @@ window.openAnalysisPage = function (assignmentId) {
   document.getElementById("ana-band-score").textContent = sub.bandScore ? `Band ${sub.bandScore}` : "Practice Drill";
   document.getElementById("ana-accuracy").textContent = `${pct}%`;
 
-  document.getElementById("ana-screenshot-box").innerHTML = sub.screenshotUrl
-    ? `<a href="${sub.screenshotUrl}" target="_blank"><img src="${sub.screenshotUrl}" alt="Result Screenshot" style="width:100%;border-radius:8px;border:1px solid var(--border);" /></a>`
+  const allImgs = sub.screenshotUrls || (sub.screenshotUrl ? [sub.screenshotUrl] : []);
+  document.getElementById("ana-screenshot-box").innerHTML = allImgs.length > 0
+    ? allImgs.map(url => `<a href="${url}" target="_blank"><img src="${url}" alt="Result Screenshot" style="width:100%;border-radius:8px;border:1px solid var(--border);margin-bottom:8px;" /></a>`).join("")
     : `<p class="muted">No screenshot attached.</p>`;
-
+  
   const logged = Object.entries(sub.mistakeCounts || {}).filter(([, v]) => v > 0);
   document.getElementById("ana-type-breakdown").innerHTML = logged.length > 0
     ? logged.map(([type, count] ) => `
