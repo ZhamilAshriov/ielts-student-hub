@@ -772,69 +772,66 @@ document.getElementById("mock-score-form")?.addEventListener("submit", async (e)
   }
 });
 
-let selectedMatrixWeek = "ALL";
 function renderTeacherHwMatrix(students, submissions) {
   const container = document.getElementById("hw-matrix-container");
   if (students.length === 0) {
     container.innerHTML = `<p class="muted center">No students in roster yet.</p>`;
     return;
   }
-  
-  // Merge static assignments and dynamic custom homework into one list for the matrix
+
+  const now = new Date();
+  // Check both syllabus assignments AND your dynamically assigned custom tasks
   const allAssignments = [
     ...ASSIGNMENTS,
-    ...cachedTeacherHw.map(t => ({
-      id: t.id,
-      title: t.title || t.reason,
-      skill: t.skill,
-      dueDate: t.dueDate,
-      week: t.week || "Custom Assignments"
-    }))
+    ...cachedTeacherHw.map(t => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }))
   ];
 
-  const weeks = [...new Set(allAssignments.map((a) => a.week || "General"))];
-  
-  if (selectedMatrixWeek === "ALL" && weeks.length > 0) {
-    selectedMatrixWeek = weeks[weeks.length - 1];
-  }
-  
-  const filteredAssignments = selectedMatrixWeek === "ALL_SHOW" 
-    ? allAssignments 
-    : allAssignments.filter((a) => (a.week || "General") === selectedMatrixWeek);
-    
-  const filterBar = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-      <label style="margin:0;white-space:nowrap;">Filter by Week:</label>
-      <select id="matrix-week-select" style="max-width:260px;padding:6px 10px;">
-        ${weeks.map((w) => `<option value="${escapeHtml(w)}" ${selectedMatrixWeek === w ? "selected" : ""}>${escapeHtml(w)}</option>`).join("")}
-        <option value="ALL_SHOW" ${selectedMatrixWeek === "ALL_SHOW" ? "selected" : ""}>Show All Weeks (${allAssignments.length})</option>
-      </select>
-    </div>
-  `;
-  
-  const now = new Date();
-  const headers = filteredAssignments.map((a) => `<th>${a.id}<br><span style="font-weight:400;font-size:11px;">${a.skill.toUpperCase()}</span></th>`).join("");
-  const rows = students.map((s) => {
-    const cells = filteredAssignments.map((a) => {
-      const sub = submissions.find((item) => item.studentId === s.studentId && item.assignmentId === a.id);
-      if (sub) {
-        const scoreTxt = sub.bandScore ? ` (${sub.bandScore})` : "";
-        if (sub.isLate) return `<td><span class="badge badge-red">Late${scoreTxt}</span></td>`;
-        if (sub.status === "graded") return `<td><span class="badge badge-green">Verified${scoreTxt}</span></td>`;
-        return `<td><span class="badge badge-blue">Submitted${scoreTxt}</span></td>`;
-      } else {
-        const isPastDue = now > new Date(a.dueDate);
-        return isPastDue ? `<td><span class="badge badge-gray">Missing</span></td>` : `<td><span class="badge badge-yellow">Pending</span></td>`;
-      }
-    }).join("");
-    return `<tr><td><strong>${s.studentId}</strong><br><span class="muted" style="font-size:12px;">${s.fullName}</span></td>${cells}</tr>`;
-  }).join("");
+  const delinquentRecords = [];
 
-  container.innerHTML = `${filterBar}<table><thead><tr><th>Student</th>${headers}</tr></thead><tbody>${rows}</tbody></table>`;
-  document.getElementById("matrix-week-select").addEventListener("change", (e) => {
-    selectedMatrixWeek = e.target.value;
-    renderTeacherHwMatrix(students, submissions);
+  students.forEach(s => {
+    const issues = [];
+    allAssignments.forEach(a => {
+      const sub = submissions.find(item => item.studentId === s.studentId && item.assignmentId === a.id);
+      const isPastDue = now > new Date(a.dueDate);
+      
+      if (!sub && isPastDue) {
+        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span></div>`);
+      } else if (sub && sub.isLate) {
+        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : 'Late'})</span></span></div>`);
+      }
+    });
+
+    if (issues.length > 0) {
+      delinquentRecords.push({ student: s, issues });
+    }
   });
+
+  if (delinquentRecords.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 8px;">
+        <div style="font-size:32px; margin-bottom:12px;">🎉</div>
+        <h3 style="margin-bottom:8px;">All Caught Up!</h3>
+        <p class="muted">Every student has submitted all past-due assignments on time.</p>
+      </div>
+    `;
+    return;
+  }
+
+  const rows = delinquentRecords.map(record => `
+    <div class="grade-card" style="margin-bottom:16px;">
+      <div style="font-weight:600; font-size:15px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; color:var(--primary);">
+        ${escapeHtml(record.student.fullName)} <span class="muted" style="font-size:13px; font-weight:400;">(${record.student.studentId})</span>
+      </div>
+      <div>${record.issues.join("")}</div>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div style="margin-bottom:16px;">
+      <p class="muted" style="font-size:14px; margin:0;">Showing students who have missing (past-due) assignments or submitted late.</p>
+    </div>
+    ${rows}
+  `;
 }
 
 function renderTeacherGradingQueue(students, submissions) {
