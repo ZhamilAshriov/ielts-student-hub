@@ -143,12 +143,13 @@ function getAnnouncementBadgeClass(tag) {
 }
 
 const MISTAKE_LABELS = {
-  MCQ: "Multiple Choice", TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given",
+  MCQ: "Reading: Multiple Choice", TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given",
   MATCHING_HEADINGS: "Matching Headings", MATCHING_INFO: "Matching Information", MATCHING_FEATURES: "Matching Features",
-  MATCHING_SENTENCE_ENDINGS: "Matching Sentence Endings", SENTENCE_COMPLETION: "Sentence Completion",
+  MATCHING_SENTENCE_ENDINGS: "Matching Sentence Endings", SENTENCE_COMPLETION: "Reading: Sentence Completion",
   SUMMARY_COMPLETION: "Summary Completion", NOTE_COMPLETION: "Note Completion", TABLE_COMPLETION: "Table Completion",
-  FLOW_CHART_COMPLETION: "Flow-chart Completion", DIAGRAM_LABELLING: "Diagram Labelling", SHORT_ANSWER: "Short-Answer Questions",
-  MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary"
+  FLOW_CHART_COMPLETION: "Flow-chart Completion", DIAGRAM_LABELLING: "Diagram Labelling", SHORT_ANSWER: "Reading: Short-Answer Questions",
+  L_MCQ: "Listening: Multiple Choice", MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", 
+  FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary", L_SENTENCE_COMPLETION: "Listening: Sentence Completion", L_SHORT_ANSWER: "Listening: Short-Answer Questions"
 };
 
 // ==========================================
