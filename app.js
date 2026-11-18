@@ -8,7 +8,9 @@ import {
   updatePassword
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
   doc,
   setDoc,
   getDoc,
@@ -42,7 +44,9 @@ const CLOUDINARY_UPLOAD_PRESET = "ielts_speaking";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-const db = getFirestore(app);
+const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+});
 const secondaryApp = initializeApp(firebaseConfig, `SecondaryAccountCreator_${Date.now()}`);
 const secondaryAuth = getAuth(secondaryApp);
 const DOMAIN = "@zhamil-hub.local";
@@ -272,7 +276,6 @@ document.querySelectorAll(".nav-tab").forEach((tab) => {
     if (tab.dataset.target === "student-homework") showHomeworkListView();
     else if (tab.dataset.target === "student-punishments") renderStudentPunishmentsList();
     else if (tab.dataset.target === "student-stats") renderStatisticsPage();
-    else if (tab.dataset.target === "teacher-attendance") renderTeacherAttendanceManager();
   });
 });
 
@@ -660,13 +663,28 @@ window.deleteDynamicTask = async function(id, collectionName) {
 
   if (matching.length > 1 && confirm(`Found ${matching.length} copies of "${label}" for this deadline.\n\nClick OK to delete ALL ${matching.length} copies at once, or Cancel to delete only this student's copy.`)) {
     await Promise.all(matching.map(item => deleteDoc(doc(db, collectionName, item.id))));
-    loadTeacherData();
+    const idsToRemove = new Set(matching.map(m => m.id));
+    if (collectionName === "customAssignments") {
+      cachedTeacherHw = cachedTeacherHw.filter(t => !idsToRemove.has(t.id));
+      renderTeacherCustomHw(cachedTeacherHw, cachedStudents);
+      renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+    } else {
+      cachedTeacherPunishments = cachedTeacherPunishments.filter(t => !idsToRemove.has(t.id));
+      renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+    }
     return;
   }
 
   if (!confirm("Delete this assigned record?")) return;
   await deleteDoc(doc(db, collectionName, id));
-  loadTeacherData();
+  if (collectionName === "customAssignments") {
+    cachedTeacherHw = cachedTeacherHw.filter(t => t.id !== id);
+    renderTeacherCustomHw(cachedTeacherHw, cachedStudents);
+    renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+  } else {
+    cachedTeacherPunishments = cachedTeacherPunishments.filter(t => t.id !== id);
+    renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+  }
 };
 
 document.getElementById("refresh-hw-btn")?.addEventListener("click", loadTeacherData);
@@ -776,7 +794,8 @@ function renderTeacherAnnouncementsList(list) {
 window.deleteAnnouncement = async function (docId) {
   if (!confirm("Delete this announcement?")) return;
   await deleteDoc(doc(db, "announcements", docId));
-  loadTeacherData();
+  cachedAnnouncements = cachedAnnouncements.filter((a) => a.docId !== docId);
+  renderTeacherAnnouncementsList(cachedAnnouncements);
 };
 document.getElementById("refresh-ann-btn")?.addEventListener("click", loadTeacherData);
 
@@ -1079,8 +1098,18 @@ window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = 
     await updateDoc(doc(db, "punishments", assignmentId), { status: "verified" }).catch(()=>console.log("Not a punishment"));
   }
 
+  const subIdx = cachedSubmissions.findIndex((s) => s.docId === docId);
+  if (subIdx !== -1) {
+    cachedSubmissions[subIdx] = { ...cachedSubmissions[subIdx], ...updatePayload };
+  }
+  if (assignmentId && assignmentId.startsWith("PUN_")) {
+    const punIdx = cachedTeacherPunishments.findIndex((p) => p.id === assignmentId);
+    if (punIdx !== -1) cachedTeacherPunishments[punIdx].status = "verified";
+    renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+  }
+
   alert("Verified & feedback saved!");
-  loadTeacherData();
+  renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
 };
 
 window.quickAssignPunishment = function (studentId, skill) {
@@ -1199,7 +1228,7 @@ async function initStudentData() {
     getDocs(query(collection(db, "submissions"), where("studentId", "==", currentStudentId))),
     getDocs(collection(db, "mockScores")),
     getDocs(collection(db, "announcements")),
-    getDocs(collection(db, "customAssignments")),
+    getDocs(query(collection(db, "customAssignments"), where("studentId", "in", [currentStudentId, "ALL"]))),
     getDocs(query(collection(db, "punishments"), where("studentId", "==", currentStudentId)))
   ]);
 
@@ -1221,10 +1250,7 @@ async function initStudentData() {
   subsSnap.forEach((d) => { studentSubmissionsMap[d.data().assignmentId] = d.data(); });
 
   cachedTeacherHw = [];
-  hwSnap.forEach((d) => {
-    const hw = d.data();
-    if (hw.studentId === currentStudentId || hw.studentId === "ALL") cachedTeacherHw.push(hw);
-  });
+  hwSnap.forEach((d) => cachedTeacherHw.push(d.data()));
 
   cachedStudentPunishments = [];
   punSnap.forEach((d) => cachedStudentPunishments.push(d.data()));
