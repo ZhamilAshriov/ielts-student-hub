@@ -952,9 +952,15 @@ function renderTeacherGradingQueue(students, submissions) {
       `;
     }
 
+    const computedBand = sub.bandScore != null
+      ? Number(sub.bandScore).toFixed(1)
+      : ((sub.skill === "reading" || sub.skill === "listening") && sub.rawScore != null && sub.totalQuestions)
+        ? rawToIeltsBand(sub.rawScore, sub.totalQuestions).toFixed(1)
+        : "6.0";
+
     const bandSelectorHtml = noBandRequired
       ? `<div><label>Status</label><input type="text" value="Completion Check" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${sub.docId}" value="" /></div>`
-      : `<div><label>Confirm / Set Band</label><select id="band-${sub.docId}">${["4.0","4.5","5.0","5.5","6.0","6.5","7.0","7.5","8.0","8.5","9.0"].map((b) => `<option value="${b}" ${String(sub.bandScore) === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select></div>`;
+      : `<div><label>Confirm / Set Band</label><select id="band-${sub.docId}">${["4.0","4.5","5.0","5.5","6.0","6.5","7.0","7.5","8.0","8.5","9.0"].map((b) => `<option value="${b}" ${computedBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select></div>`;
 
     return `
       <div class="grade-card">
@@ -1620,10 +1626,12 @@ window.submitDynamicScreenshot = async function(totalQ) {
     submittedAt: serverTimestamp()
   };
 
+  const bandScore = rawToIeltsBand(rawVal, totalQ);
+
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: activeDynamicTask.skill, status: "submitted",
     isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(),
-    rawScore, totalQuestions: totalQ, screenshotUrls: urls, mistakeCounts
+    rawScore, totalQuestions: totalQ, bandScore, screenshotUrls: urls, mistakeCounts
   });
 
   await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), submissionData);
