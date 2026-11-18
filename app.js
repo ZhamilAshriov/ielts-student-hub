@@ -1860,8 +1860,19 @@ const isPastDue = now > dueDateObj;
         if (sub && (hw.skill === "reading" || hw.skill === "listening")) actionBtn = `<button class="btn btn-outline btn-sm" onclick="window.openAnalysisPage('${hw.id}')">View Receipt</button>`;
         else actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
       } else {
-        statusBadge = isPastDue ? `<span class="badge badge-gray">Missing (Past Due)</span>` : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
-        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">${isPastDue ? "Submit Late" : "Submit"}</button>`;
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const isLockedOut = now > new Date(new Date(hw.dueDate).getTime() + oneDayMs);
+
+        if (isLockedOut) {
+          statusBadge = `<span class="badge badge-red">Closed (Deadline Passed)</span>`;
+          actionBtn = `<span class="muted" style="font-size:13px;font-weight:600;color:var(--danger);">Closed</span>`;
+        } else if (isPastDue) {
+          statusBadge = `<span class="badge badge-gray">Missing (Late Window Open)</span>`;
+          actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Late</button>`;
+        } else {
+          statusBadge = `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
+          actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit</button>`;
+        }
       }
 
       return `
@@ -1909,6 +1920,13 @@ window.startAssignment = function (assignmentId) {
   const allAssignments = [...ASSIGNMENTS, ...mappedDynamicHw];
   const hw = allAssignments.find((a) => a.id === assignmentId);
   if (!hw) return;
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  if (new Date() > new Date(new Date(hw.dueDate).getTime() + oneDayMs)) {
+    alert("The 24-hour late submission window for this assignment has closed.");
+    renderAssignmentsList();
+    return;
+  }
 
   document.getElementById("hw-list-view").classList.add("hidden");
   document.getElementById("hw-analysis-view").classList.add("hidden");
