@@ -959,7 +959,10 @@ function renderTeacherGradingQueue(students, submissions) {
         <div class="grade-controls-row">
           ${bandSelectorHtml}
           <div><label>Teacher Feedback</label><input type="text" id="fb-${sub.docId}" placeholder="Leave a comment or feedback..." value="${escapeHtml(sub.teacherFeedback || "")}" /></div>
-          <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', '${sub.assignmentId}', ${noBandRequired})">Save & Verify</button>
+          <div style="display:flex;gap:8px;align-items:flex-end;">
+            <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', '${sub.assignmentId}', ${noBandRequired})">Save & Verify</button>
+            <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" onclick="window.quickAssignPunishment('${sub.studentId}', '${sub.skill}')">⚡ Assign Punishment</button>
+          </div>
         </div>
       </div>
     `;
@@ -979,6 +982,20 @@ window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = 
 
   alert("Verified & feedback saved!");
   loadTeacherData();
+};
+
+window.quickAssignPunishment = function (studentId, skill) {
+  const punTab = document.querySelector('#teacher-nav [data-target="teacher-punishments"]');
+  if (punTab) punTab.click();
+
+  const targetSel = document.getElementById("pun-target-select");
+  if (targetSel) targetSel.value = studentId;
+
+  const skillSel = document.getElementById("pun-skill-select");
+  if (skillSel && [...skillSel.options].some((o) => o.value === skill)) {
+    skillSel.value = skill;
+    renderSkillConfigForm("pun-skill-select", "pun-config-container");
+  }
 };
 
 document.getElementById("refresh-roster-btn")?.addEventListener("click", loadTeacherData);
