@@ -839,14 +839,21 @@ function renderTeacherHwMatrix(students, submissions) {
     const studentAssignments = [...ASSIGNMENTS, ...studentCustomTasks];
     const issues = [];
 
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
     studentAssignments.forEach(a => {
       const sub = submissions.find(item => item.studentId === s.studentId && item.assignmentId === a.id);
-      const isPastDue = now > new Date(a.dueDate);
+      const dueTime = new Date(a.dueDate).getTime();
+      const isPastDue = now.getTime() > dueTime;
+      const isOverOneDayLate = now.getTime() > (dueTime + oneDayMs);
       
       if (!sub && isPastDue) {
-        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span></div>`);
+        const punishBtn = isOverOneDayLate
+          ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;margin-left:auto;" onclick="window.quickAssignPunishment('${s.studentId}', '${a.skill}')">⚡ Assign Punishment</button>`
+          : "";
+        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span>${punishBtn}</div>`);
       } else if (sub && sub.isLate) {
-        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : 'Late'})</span></span></div>`);
+        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : 'Late'})</span></span></div>`);
       }
     });
 
