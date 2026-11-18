@@ -587,6 +587,17 @@ function renderTeacherPunishments(tasks, students) {
 }
 
 window.deleteDynamicTask = async function(id, collectionName) {
+  const list = collectionName === "customAssignments" ? cachedTeacherHw : cachedTeacherPunishments;
+  const target = list.find(item => item.id === id);
+  const label = target ? (target.title || target.reason) : "";
+  const matching = target ? list.filter(item => (item.title || item.reason) === label && item.dueDate === target.dueDate) : [];
+
+  if (matching.length > 1 && confirm(`Found ${matching.length} copies of "${label}" for this deadline.\n\nClick OK to delete ALL ${matching.length} copies at once, or Cancel to delete only this student's copy.`)) {
+    await Promise.all(matching.map(item => deleteDoc(doc(db, collectionName, item.id))));
+    loadTeacherData();
+    return;
+  }
+
   if (!confirm("Delete this assigned record?")) return;
   await deleteDoc(doc(db, collectionName, id));
   loadTeacherData();
@@ -817,17 +828,18 @@ function renderTeacherHwMatrix(students, submissions) {
   }
 
   const now = new Date();
-  // Check both syllabus assignments AND your dynamically assigned custom tasks
-  const allAssignments = [
-    ...ASSIGNMENTS,
-    ...cachedTeacherHw.map(t => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }))
-  ];
-
   const delinquentRecords = [];
 
   students.forEach(s => {
+    // Only check syllabus assignments + custom tasks assigned specifically to THIS student
+    const studentCustomTasks = cachedTeacherHw
+      .filter(t => t.studentId === s.studentId || t.studentId === "ALL")
+      .map(t => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }));
+
+    const studentAssignments = [...ASSIGNMENTS, ...studentCustomTasks];
     const issues = [];
-    allAssignments.forEach(a => {
+
+    studentAssignments.forEach(a => {
       const sub = submissions.find(item => item.studentId === s.studentId && item.assignmentId === a.id);
       const isPastDue = now > new Date(a.dueDate);
       
