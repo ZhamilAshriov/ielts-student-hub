@@ -1764,7 +1764,9 @@ function renderAssignmentsList() {
 
   allAssignments.forEach((hw) => {
     const isSub = studentSubmissionsMap[hw.id] || hw.status === "submitted" || hw.status === "verified";
-    const isPastDue = now > new Date(hw.dueDate);
+    // Ensure local timezone comparison
+const dueDateObj = new Date(hw.dueDate.endsWith('Z') || hw.dueDate.includes('+') ? hw.dueDate : hw.dueDate);
+const isPastDue = now > dueDateObj;
     
     if (isSub) {
       doneList.push(hw);
@@ -1809,7 +1811,8 @@ function renderAssignmentsList() {
   const groupsHtml = Object.entries(grouped).map(([weekTitle, items]) => {
     const cardsHtml = items.map((hw) => {
       const sub = studentSubmissionsMap[hw.id];
-      const isPastDue = now > new Date(hw.dueDate);
+      const dueDateObj = new Date(hw.dueDate.endsWith('Z') || hw.dueDate.includes('+') ? hw.dueDate : hw.dueDate);
+      const isPastDue = now > dueDateObj;
       const isSub = sub || hw.status === "submitted" || hw.status === "verified";
       
       let statusBadge = "";
@@ -1829,7 +1832,7 @@ function renderAssignmentsList() {
         else actionBtn = `<span class="muted" style="font-size:13px;margin:0;">Submitted</span>`;
       } else {
         statusBadge = isPastDue ? `<span class="badge badge-gray">Missing (Past Due)</span>` : `<span class="badge badge-yellow">Due ${formatDueDate(hw.dueDate)}</span>`;
-        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">Submit Late</button>`;
+        actionBtn = `<button class="btn btn-primary btn-sm" onclick="window.startAssignment('${hw.id}')">${isPastDue ? "Submit Late" : "Submit"}</button>`;
       }
 
       return `
