@@ -1105,9 +1105,10 @@ function renderTeacherGradingQueue(students, submissions) {
         <div class="grade-controls-row">
           ${bandSelectorHtml}
           <div><label>Teacher Feedback</label><input type="text" id="fb-${sub.docId}" placeholder="Leave a comment or feedback..." value="${escapeHtml(sub.teacherFeedback || "")}" /></div>
-          <div style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
             <button class="btn btn-primary" onclick="window.saveTeacherGrade('${sub.docId}', '${sub.assignmentId}', ${noBandRequired})">Save & Verify</button>
             <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" onclick="window.quickAssignPunishment('${sub.studentId}', '${sub.skill}')">⚡ Assign Punishment</button>
+            <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteSubmission('${sub.docId}', '${sub.assignmentId}')">🗑️ Delete</button>
           </div>
         </div>
       </div>
@@ -1143,6 +1144,29 @@ window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = 
 window.toggleArchivedGraded = function () {
   showArchivedGraded = !showArchivedGraded;
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+};
+
+window.deleteSubmission = async function (docId, assignmentId) {
+  if (!confirm("Delete this student submission permanently?")) return;
+
+  await deleteDoc(doc(db, "submissions", docId));
+
+  // If it was a custom assignment or punishment, reset its status back to pending
+  if (assignmentId && assignmentId.startsWith("CUSTOMHW_")) {
+    await updateDoc(doc(db, "customAssignments", assignmentId), { status: "pending" }).catch(() => {});
+    const hwIdx = cachedTeacherHw.findIndex((h) => h.id === assignmentId);
+    if (hwIdx !== -1) cachedTeacherHw[hwIdx].status = "pending";
+    renderTeacherCustomHw(cachedTeacherHw, cachedStudents);
+  } else if (assignmentId && assignmentId.startsWith("PUN_")) {
+    await updateDoc(doc(db, "punishments", assignmentId), { status: "pending" }).catch(() => {});
+    const punIdx = cachedTeacherPunishments.findIndex((p) => p.id === assignmentId);
+    if (punIdx !== -1) cachedTeacherPunishments[punIdx].status = "pending";
+    renderTeacherPunishments(cachedTeacherPunishments, cachedStudents);
+  }
+
+  cachedSubmissions = cachedSubmissions.filter((s) => s.docId !== docId);
+  renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+  renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
 };
 
 window.quickAssignPunishment = function (studentId, skill) {
@@ -1735,6 +1759,10 @@ window.startPunishmentRunner = async function (taskId) {
 async function uploadMultipleFiles(fileInputId) {
   const files = document.getElementById(fileInputId)?.files;
   if (!files || files.length === 0) return null;
+  if (files.length > 8) {
+    alert("You can upload a maximum of 8 images per submission.");
+    return null;
+  }
   const urls = [];
   for (let i = 0; i < files.length; i++) {
     const formData = new FormData(); formData.append("file", files[i]); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
@@ -1742,7 +1770,7 @@ async function uploadMultipleFiles(fileInputId) {
     const data = await res.json();
     if (data.secure_url) urls.push(data.secure_url);
   }
- return urls.length > 0 ? urls : null;
+  return urls.length > 0 ? urls : null;
 }
 
 window.submitDynamicScreenshot = async function(totalQ) {
@@ -2080,6 +2108,12 @@ window.startAssignment = function (assignmentId) {
   const allAssignments = [...ASSIGNMENTS, ...mappedDynamicHw];
   const hw = allAssignments.find((a) => a.id === assignmentId);
   if (!hw) return;
+
+  if (studentSubmissionsMap[assignmentId] || hw.status === "submitted" || hw.status === "verified") {
+    alert("You have already submitted this assignment.");
+    renderAssignmentsList();
+    return;
+  }
 
   const oneDayMs = 24 * 60 * 60 * 1000;
   if (new Date() > new Date(new Date(hw.dueDate).getTime() + oneDayMs)) {
