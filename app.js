@@ -544,22 +544,65 @@ function renderTeacherCustomHw(tasks, students) {
   const nameMap = {};
   students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
 
-  tbody.innerHTML = tasks.map((t) => {
-    const sName = nameMap[t.studentId] || t.studentId;
-    const statusBadge = t.status === "verified" ? `<span class="badge badge-green">Verified</span>` : t.status === "submitted" ? `<span class="badge badge-blue">Submitted</span>` : `<span class="badge badge-red">Pending</span>`;
-    let actionBtn = `<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteDynamicTask('${t.id}', 'customAssignments')">Delete</button>`;
+  // Group identical tasks (same skill, title, and dueDate) into clean rows
+  const groupedMap = new Map();
+  tasks.forEach((t) => {
+    const key = `${t.skill}|${t.title}|${t.dueDate}`;
+    if (!groupedMap.has(key)) {
+      groupedMap.set(key, {
+        representativeId: t.id,
+        skill: t.skill,
+        title: t.title,
+        dueDate: t.dueDate,
+        items: []
+      });
+    }
+    groupedMap.get(key).items.push(t);
+  });
+
+  tbody.innerHTML = Array.from(groupedMap.values()).map((group) => {
+    const isBatch = group.items.length > 1;
+    const first = group.items[0];
+
+    let targetHtml = "";
+    let statusHtml = "";
+
+    if (isBatch) {
+      const doneCount = group.items.filter((i) => i.status === "submitted" || i.status === "verified").length;
+      const pendingStudents = group.items
+        .filter((i) => i.status !== "submitted" && i.status !== "verified")
+        .map((i) => i.studentId);
+
+      targetHtml = `<strong>📢 Group (${group.items.length} students)</strong>` +
+        (pendingStudents.length > 0
+          ? `<br><span class="muted" style="font-size:11px;">Pending: ${pendingStudents.slice(0, 4).join(", ")}${pendingStudents.length > 4 ? ` +${pendingStudents.length - 4} more` : ""}</span>`
+          : `<br><span style="color:var(--success);font-size:11px;font-weight:600;">All submitted!</span>`);
+
+      const badgeClass = doneCount === group.items.length ? "badge-green" : doneCount > 0 ? "badge-blue" : "badge-red";
+      statusHtml = `<span class="badge ${badgeClass}">${doneCount} / ${group.items.length} Done</span>`;
+    } else {
+      const sName = nameMap[first.studentId] || first.studentId;
+      targetHtml = `<strong>${first.studentId}</strong><br><span class="muted" style="font-size:12px;">${escapeHtml(sName)}</span>`;
+      statusHtml = first.status === "verified"
+        ? `<span class="badge badge-green">Verified</span>`
+        : first.status === "submitted"
+          ? `<span class="badge badge-blue">Submitted</span>`
+          : `<span class="badge badge-red">Pending</span>`;
+    }
+
+    const deleteLabel = isBatch ? "Delete All" : "Delete";
+    const actionBtn = `<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteDynamicTask('${group.representativeId}', 'customAssignments')">${deleteLabel}</button>`;
 
     return `
       <tr>
-        <td><strong>${t.studentId}</strong><br><span class="muted" style="font-size:12px;">${sName}</span></td>
-        <td><span class="role-pill">${t.skill.toUpperCase()}</span><br>${escapeHtml(t.title)}</td>
-        <td>${statusBadge}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(t.dueDate)}</span></td>
+        <td>${targetHtml}</td>
+        <td><span class="role-pill">${group.skill.toUpperCase()}</span><br>${escapeHtml(group.title)}</td>
+        <td>${statusHtml}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(group.dueDate)}</span></td>
         <td>${actionBtn}</td>
       </tr>
     `;
   }).join("");
 }
-
 function renderTeacherPunishments(tasks, students) {
   const tbody = document.getElementById("group-pun-tbody");
   if (!tbody) return;
