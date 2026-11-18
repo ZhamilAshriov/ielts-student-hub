@@ -534,75 +534,95 @@ if (assignPunForm) {
   });
 }
 
-function renderTeacherCustomHw(tasks, students) {
-  const tbody = document.getElementById("group-hw-tbody");
-  if (!tbody) return;
-  if (tasks.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="4" class="muted center">No active custom homework.</td></tr>`;
+let showArchivedMatrixHw = false;
+
+function renderTeacherHwMatrix(students, submissions) {
+  const container = document.getElementById("hw-matrix-container");
+  if (students.length === 0) {
+    container.innerHTML = `<p class="muted center">No students in roster yet.</p>`;
     return;
   }
-  const nameMap = {};
-  students.forEach((s) => { nameMap[s.studentId] = s.fullName; });
 
-  // Group identical tasks (same skill, title, and dueDate) into clean rows
-  const groupedMap = new Map();
-  tasks.forEach((t) => {
-    const key = `${t.skill}|${t.title}|${t.dueDate}`;
-    if (!groupedMap.has(key)) {
-      groupedMap.set(key, {
-        representativeId: t.id,
-        skill: t.skill,
-        title: t.title,
-        dueDate: t.dueDate,
-        items: []
-      });
+  const now = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const cutoffMs = now.getTime() - 14 * oneDayMs;
+  const delinquentRecords = [];
+  let hiddenIssuesCount = 0;
+
+  students.forEach((s) => {
+    const studentCustomTasks = cachedTeacherHw
+      .filter((t) => t.studentId === s.studentId || t.studentId === "ALL")
+      .map((t) => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }));
+
+    const studentAssignments = [...ASSIGNMENTS, ...studentCustomTasks];
+    const issues = [];
+
+    studentAssignments.forEach((a) => {
+      const sub = submissions.find((item) => item.studentId === s.studentId && item.assignmentId === a.id);
+      const dueTime = new Date(a.dueDate).getTime();
+      const isPastDue = now.getTime() > dueTime;
+      const isOverOneDayLate = now.getTime() > (dueTime + oneDayMs);
+      const isArchived = dueTime < cutoffMs;
+
+      if ((!sub && isPastDue) || (sub && sub.isLate)) {
+        if (!showArchivedMatrixHw && isArchived) {
+          hiddenIssuesCount++;
+          return;
+        }
+        if (!sub && isPastDue) {
+          const punishBtn = isOverOneDayLate
+            ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;margin-left:auto;" onclick="window.quickAssignPunishment('${s.studentId}', '${a.skill}')">⚡ Assign Punishment</button>`
+            : "";
+          issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span>${punishBtn}</div>`);
+        } else if (sub && sub.isLate) {
+          issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : "Late"})</span></span></div>`);
+        }
+      }
+    });
+
+    if (issues.length > 0) {
+      delinquentRecords.push({ student: s, issues });
     }
-    groupedMap.get(key).items.push(t);
   });
 
-  tbody.innerHTML = Array.from(groupedMap.values()).map((group) => {
-    const isBatch = group.items.length > 1;
-    const first = group.items[0];
+  const archiveToggleBtn = (hiddenIssuesCount > 0 || showArchivedMatrixHw)
+    ? `<button type="button" class="btn btn-outline btn-sm" onclick="window.toggleArchivedMatrixHw()">${showArchivedMatrixHw ? "Hide Archived (14d+)" : `Show Archived (${hiddenIssuesCount} older)`}</button>`
+    : "";
 
-    let targetHtml = "";
-    let statusHtml = "";
-
-    if (isBatch) {
-      const doneCount = group.items.filter((i) => i.status === "submitted" || i.status === "verified").length;
-      const pendingStudents = group.items
-        .filter((i) => i.status !== "submitted" && i.status !== "verified")
-        .map((i) => i.studentId);
-
-      targetHtml = `<strong>📢 Group (${group.items.length} students)</strong>` +
-        (pendingStudents.length > 0
-          ? `<br><span class="muted" style="font-size:11px;">Pending: ${pendingStudents.slice(0, 4).join(", ")}${pendingStudents.length > 4 ? ` +${pendingStudents.length - 4} more` : ""}</span>`
-          : `<br><span style="color:var(--success);font-size:11px;font-weight:600;">All submitted!</span>`);
-
-      const badgeClass = doneCount === group.items.length ? "badge-green" : doneCount > 0 ? "badge-blue" : "badge-red";
-      statusHtml = `<span class="badge ${badgeClass}">${doneCount} / ${group.items.length} Done</span>`;
-    } else {
-      const sName = nameMap[first.studentId] || first.studentId;
-      targetHtml = `<strong>${first.studentId}</strong><br><span class="muted" style="font-size:12px;">${escapeHtml(sName)}</span>`;
-      statusHtml = first.status === "verified"
-        ? `<span class="badge badge-green">Verified</span>`
-        : first.status === "submitted"
-          ? `<span class="badge badge-blue">Submitted</span>`
-          : `<span class="badge badge-red">Pending</span>`;
-    }
-
-    const deleteLabel = isBatch ? "Delete All" : "Delete";
-    const actionBtn = `<button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteDynamicTask('${group.representativeId}', 'customAssignments')">${deleteLabel}</button>`;
-
-    return `
-      <tr>
-        <td>${targetHtml}</td>
-        <td><span class="role-pill">${group.skill.toUpperCase()}</span><br>${escapeHtml(group.title)}</td>
-        <td>${statusHtml}<br><span class="muted" style="font-size:11px;">Due: ${formatDueDate(group.dueDate)}</span></td>
-        <td>${actionBtn}</td>
-      </tr>
+  if (delinquentRecords.length === 0) {
+    container.innerHTML = `
+      <div style="text-align:center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 8px;">
+        <div style="font-size:32px; margin-bottom:12px;">🎉</div>
+        <h3 style="margin-bottom:8px;">All Caught Up!</h3>
+        <p class="muted">Every student has submitted all recent past-due assignments on time.</p>
+        ${archiveToggleBtn ? `<div style="margin-top:12px;">${archiveToggleBtn}</div>` : ""}
+      </div>
     `;
-  }).join("");
+    return;
+  }
+
+  const rows = delinquentRecords.map((record) => `
+    <div class="grade-card" style="margin-bottom:16px;">
+      <div style="font-weight:600; font-size:15px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; color:var(--primary);">
+        ${escapeHtml(record.student.fullName)} <span class="muted" style="font-size:13px; font-weight:400;">(${record.student.studentId})</span>
+      </div>
+      <div>${record.issues.join("")}</div>
+    </div>
+  `).join("");
+
+  container.innerHTML = `
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      <p class="muted" style="font-size:14px; margin:0;">Showing students who have missing or late assignments from the last 14 days.</p>
+      ${archiveToggleBtn}
+    </div>
+    ${rows}
+  `;
 }
+
+window.toggleArchivedMatrixHw = function () {
+  showArchivedMatrixHw = !showArchivedMatrixHw;
+  renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+};
 function renderTeacherPunishments(tasks, students) {
   const tbody = document.getElementById("group-pun-tbody");
   if (!tbody) return;
