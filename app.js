@@ -886,6 +886,8 @@ document.getElementById("mock-score-form")?.addEventListener("submit", async (e)
   }
 });
 
+let showArchivedMatrixHw = false;
+
 function renderTeacherHwMatrix(students, submissions) {
   const container = document.getElementById("hw-matrix-container");
   if (students.length === 0) {
@@ -894,32 +896,39 @@ function renderTeacherHwMatrix(students, submissions) {
   }
 
   const now = new Date();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const cutoffMs = now.getTime() - 14 * oneDayMs;
   const delinquentRecords = [];
+  let hiddenIssuesCount = 0;
 
-  students.forEach(s => {
-    // Only check syllabus assignments + custom tasks assigned specifically to THIS student
+  students.forEach((s) => {
     const studentCustomTasks = cachedTeacherHw
-      .filter(t => t.studentId === s.studentId || t.studentId === "ALL")
-      .map(t => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }));
+      .filter((t) => t.studentId === s.studentId || t.studentId === "ALL")
+      .map((t) => ({ id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate }));
 
     const studentAssignments = [...ASSIGNMENTS, ...studentCustomTasks];
     const issues = [];
 
-    const oneDayMs = 24 * 60 * 60 * 1000;
-
-    studentAssignments.forEach(a => {
-      const sub = submissions.find(item => item.studentId === s.studentId && item.assignmentId === a.id);
+    studentAssignments.forEach((a) => {
+      const sub = submissions.find((item) => item.studentId === s.studentId && item.assignmentId === a.id);
       const dueTime = new Date(a.dueDate).getTime();
       const isPastDue = now.getTime() > dueTime;
       const isOverOneDayLate = now.getTime() > (dueTime + oneDayMs);
-      
-      if (!sub && isPastDue) {
-        const punishBtn = isOverOneDayLate
-          ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;margin-left:auto;" onclick="window.quickAssignPunishment('${s.studentId}', '${a.skill}')">⚡ Assign Punishment</button>`
-          : "";
-        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span>${punishBtn}</div>`);
-      } else if (sub && sub.isLate) {
-        issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : 'Late'})</span></span></div>`);
+      const isArchived = dueTime < cutoffMs;
+
+      if ((!sub && isPastDue) || (sub && sub.isLate)) {
+        if (!showArchivedMatrixHw && isArchived) {
+          hiddenIssuesCount++;
+          return;
+        }
+        if (!sub && isPastDue) {
+          const punishBtn = isOverOneDayLate
+            ? `<button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;margin-left:auto;" onclick="window.quickAssignPunishment('${s.studentId}', '${a.skill}')">⚡ Assign Punishment</button>`
+            : "";
+          issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-red">Missing</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Due: ${formatDueDate(a.dueDate)})</span></span>${punishBtn}</div>`);
+        } else if (sub && sub.isLate) {
+          issues.push(`<div style="margin-bottom:8px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;"><span class="badge badge-yellow">Late</span> <span><strong>${escapeHtml(a.title)}</strong> <span class="muted" style="font-size:12px;">(Submitted: ${sub.submittedAt?.toDate ? formatDueDate(sub.submittedAt.toDate().toISOString()) : "Late"})</span></span></div>`);
+        }
       }
     });
 
@@ -928,18 +937,23 @@ function renderTeacherHwMatrix(students, submissions) {
     }
   });
 
+  const archiveToggleBtn = (hiddenIssuesCount > 0 || showArchivedMatrixHw)
+    ? `<button type="button" class="btn btn-outline btn-sm" onclick="window.toggleArchivedMatrixHw()">${showArchivedMatrixHw ? "Hide Archived (14d+)" : `Show Archived (${hiddenIssuesCount} older)`}</button>`
+    : "";
+
   if (delinquentRecords.length === 0) {
     container.innerHTML = `
       <div style="text-align:center; padding: 40px 20px; border: 1px dashed var(--border); border-radius: 8px;">
         <div style="font-size:32px; margin-bottom:12px;">🎉</div>
         <h3 style="margin-bottom:8px;">All Caught Up!</h3>
-        <p class="muted">Every student has submitted all past-due assignments on time.</p>
+        <p class="muted">Every student has submitted all recent past-due assignments on time.</p>
+        ${archiveToggleBtn ? `<div style="margin-top:12px;">${archiveToggleBtn}</div>` : ""}
       </div>
     `;
     return;
   }
 
-  const rows = delinquentRecords.map(record => `
+  const rows = delinquentRecords.map((record) => `
     <div class="grade-card" style="margin-bottom:16px;">
       <div style="font-weight:600; font-size:15px; margin-bottom:12px; border-bottom:1px solid var(--border); padding-bottom:8px; color:var(--primary);">
         ${escapeHtml(record.student.fullName)} <span class="muted" style="font-size:13px; font-weight:400;">(${record.student.studentId})</span>
@@ -949,12 +963,18 @@ function renderTeacherHwMatrix(students, submissions) {
   `).join("");
 
   container.innerHTML = `
-    <div style="margin-bottom:16px;">
-      <p class="muted" style="font-size:14px; margin:0;">Showing students who have missing (past-due) assignments or submitted late.</p>
+    <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px;">
+      <p class="muted" style="font-size:14px; margin:0;">Showing students who have missing or late assignments from the last 14 days.</p>
+      ${archiveToggleBtn}
     </div>
     ${rows}
   `;
 }
+
+window.toggleArchivedMatrixHw = function () {
+  showArchivedMatrixHw = !showArchivedMatrixHw;
+  renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+};
 
 function renderTeacherGradingQueue(students, submissions) {
   const container = document.getElementById("grading-list-container");
@@ -1692,7 +1712,7 @@ window.submitDynamicScreenshot = async function(totalQ) {
     submittedAt: serverTimestamp()
   };
 
-  const bandScore = rawToIeltsBand(rawVal, totalQ);
+  const bandScore = rawToIeltsBand(rawScore, totalQ);
 
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: activeDynamicTask.skill, status: "submitted",
