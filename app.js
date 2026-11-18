@@ -995,19 +995,47 @@ window.toggleArchivedMatrixHw = function () {
   renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
 };
 
+let showArchivedGraded = false;
+
 function renderTeacherGradingQueue(students, submissions) {
   const container = document.getElementById("grading-list-container");
   const ungradedCount = submissions.filter((s) => s.status !== "graded").length;
   document.getElementById("nav-grade-badge").textContent = ungradedCount;
-  if (submissions.length === 0) {
-    container.innerHTML = `<p class="muted center">No homework submissions yet.</p>`;
+
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const cutoffMs = Date.now() - oneDayMs;
+
+  const isExpiredGraded = (sub) => {
+    if (sub.status !== "graded") return false;
+    const gradedMs = sub.gradedAt?.toMillis
+      ? sub.gradedAt.toMillis()
+      : (typeof sub.gradedAt === "number" ? sub.gradedAt : 0);
+    return gradedMs > 0 && gradedMs < cutoffMs;
+  };
+
+  const visibleSubmissions = showArchivedGraded
+    ? [...submissions]
+    : submissions.filter((s) => !isExpiredGraded(s));
+  const hiddenCount = submissions.length - visibleSubmissions.length;
+
+  const toggleBarHtml = (hiddenCount > 0 || showArchivedGraded)
+    ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+         <button type="button" class="btn btn-outline btn-sm" onclick="window.toggleArchivedGraded()">
+           ${showArchivedGraded ? "Hide Checked (1d+)" : `Show Older Checked (${hiddenCount})`}
+         </button>
+       </div>`
+    : "";
+
+  if (visibleSubmissions.length === 0) {
+    container.innerHTML = toggleBarHtml + `<p class="muted center">No active submissions to review.</p>`;
     return;
   }
-  submissions.sort((a, b) => (a.status === "graded") - (b.status === "graded"));
+
+  visibleSubmissions.sort((a, b) => (a.status === "graded") - (b.status === "graded"));
   const studentNameMap = {};
   students.forEach((s) => { studentNameMap[s.studentId] = s.fullName; });
 
-  container.innerHTML = submissions.map((sub) => {
+  container.innerHTML = toggleBarHtml + visibleSubmissions.map((sub) => {
     const isCustom = sub.assignmentId.startsWith("CUSTOMHW_") || sub.assignmentId.startsWith("PUN_");
     const hw = isCustom ? { title: "Dynamic Task", isDrill: false } : ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
     const title = isCustom ? (sub.skill.toUpperCase() + " Submission") : (hw ? hw.title : sub.assignmentId);
@@ -1100,7 +1128,7 @@ window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = 
 
   const subIdx = cachedSubmissions.findIndex((s) => s.docId === docId);
   if (subIdx !== -1) {
-    cachedSubmissions[subIdx] = { ...cachedSubmissions[subIdx], ...updatePayload };
+    cachedSubmissions[subIdx] = { ...cachedSubmissions[subIdx], ...updatePayload, gradedAt: Date.now() };
   }
   if (assignmentId && assignmentId.startsWith("PUN_")) {
     const punIdx = cachedTeacherPunishments.findIndex((p) => p.id === assignmentId);
@@ -1109,6 +1137,11 @@ window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = 
   }
 
   alert("Verified & feedback saved!");
+  renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+};
+
+window.toggleArchivedGraded = function () {
+  showArchivedGraded = !showArchivedGraded;
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
 };
 
