@@ -154,7 +154,12 @@ const MISTAKE_LABELS = {
   SUMMARY_COMPLETION: "Summary Completion", NOTE_COMPLETION: "Note Completion", TABLE_COMPLETION: "Table Completion",
   FLOW_CHART_COMPLETION: "Flow-chart Completion", DIAGRAM_LABELLING: "Diagram Labelling", SHORT_ANSWER: "Reading: Short-Answer Questions",
   L_MCQ: "Listening: Multiple Choice", MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", 
-  FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary", L_SENTENCE_COMPLETION: "Listening: Sentence Completion", L_SHORT_ANSWER: "Listening: Short-Answer Questions"
+  FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary", L_SENTENCE_COMPLETION: "Listening: Sentence Completion", L_SHORT_ANSWER: "Listening: Short-Answer Questions",
+  W_ARTICLES: "Writing: Articles & Determiners", W_TENSE: "Writing: Verb Tense Consistency", W_SVA: "Writing: Subject-Verb Agreement",
+  W_PREPOSITIONS: "Writing: Prepositions", W_WORD_CHOICE: "Writing: Word Choice & Collocation", W_SENTENCE_STRUCTURE: "Writing: Run-ons & Fragments",
+  W_TASK_RESPONSE: "Writing: Task Response / Coherence",
+  S_FLUENCY_HESITATION: "Speaking: Hesitation & Fillers", S_GRAMMAR_TENSE: "Speaking: Grammar & Tense Control",
+  S_LEXICAL_RANGE: "Speaking: Limited Vocabulary Range", S_PRONUNCIATION: "Speaking: Pronunciation & Stress"
 };
 
 // ==========================================
@@ -1083,9 +1088,25 @@ function renderTeacherGradingQueue(students, submissions) {
           <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
         </div>
       `;
-      `;
     } else if (sub.skill === "writing") {
-      contentHtml = `<div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div><div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>`;
+      const savedWritingAiHtml = sub.aiEvaluation
+        ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
+             <strong style="color:var(--primary);">🎯 IELTS Writing Evaluation:</strong>
+             <div style="margin-top:4px;white-space:pre-line;line-height:1.55;">${escapeHtml(sub.aiEvaluation)}</div>
+           </div>`
+        : "";
+
+      contentHtml = `
+        <div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div>
+        <div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+          <button type="button" class="btn btn-outline btn-sm" id="ai-wrt-btn-${sub.docId}" onclick="window.evaluateWritingSubmission('${sub.docId}')">
+            ${sub.aiEvaluation ? "🔄 Re-run AI Writing Check" : "✨ Evaluate Writing (Gemini)"}
+          </button>
+          <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;color:var(--muted);" onclick="window.setTeacherGeminiKey()">🔑 Set API Key</button>
+        </div>
+        ${savedWritingAiHtml}
+      `;
     } else if (sub.skill === "speaking") {
       const savedAiHtml = (sub.transcript || sub.aiEvaluation)
         ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
@@ -1350,6 +1371,112 @@ window.quickAssignPunishment = function (studentId, skill) {
 document.getElementById("refresh-roster-btn")?.addEventListener("click", loadTeacherData);
 document.getElementById("refresh-matrix-btn")?.addEventListener("click", loadTeacherData);
 document.getElementById("refresh-grading-btn")?.addEventListener("click", loadTeacherData);
+
+async function logAiMistakesToStudent(studentId, mistakeTagCounts) {
+  if (!studentId || !mistakeTagCounts || typeof mistakeTagCounts !== "object") return;
+  const validEntries = Object.entries(mistakeTagCounts).filter(([k, v]) => MISTAKE_LABELS[k] && Number(v) > 0);
+  if (validEntries.length === 0) return;
+
+  const studentRef = doc(db, "users", studentId);
+  const snap = await getDoc(studentRef);
+  if (!snap.exists()) return;
+
+  const currentMistakes = { ...(snap.data().permanentMistakes || {}) };
+  validEntries.forEach(([key, count]) => {
+    currentMistakes[key] = { wrong: (currentMistakes[key]?.wrong || 0) + Number(count) };
+  });
+
+  await updateDoc(studentRef, { permanentMistakes: currentMistakes });
+  const idx = cachedStudents.findIndex((s) => s.studentId === studentId);
+  if (idx !== -1) cachedStudents[idx].permanentMistakes = currentMistakes;
+}
+
+window.evaluateWritingSubmission = async function (docId) {
+  const sub = cachedSubmissions.find((s) => s.docId === docId);
+  if (!sub || !sub.essayText) return alert("No essay text found for this submission.");
+
+  let apiKey = localStorage.getItem("ielts_hub_gemini_key");
+  if (!apiKey) {
+    apiKey = window.setTeacherGeminiKey();
+    if (!apiKey) return;
+  }
+
+  const btn = document.getElementById(`ai-wrt-btn-${docId}`);
+  const origText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "✨ Gemini grading essay...";
+  }
+
+  try {
+    const taskObj = cachedTeacherHw.find((h) => h.id === sub.assignmentId)
+      || cachedTeacherPunishments.find((p) => p.id === sub.assignmentId)
+      || ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+    const promptText = taskObj?.details?.promptText || taskObj?.promptText || taskObj?.title || "IELTS Writing Task";
+
+    const systemPrompt = `You are a strict, certified IELTS Writing examiner.
+Grade the student's response to this prompt: "${promptText}".
+Word count: ${sub.essayText.trim().split(/\s+/).filter(Boolean).length} words.
+
+Return valid JSON with three fields:
+1. "estimatedBand": A string band score like "6.0", "6.5", or "7.0".
+2. "evaluation": A structured IELTS Writing assessment formatted cleanly with line breaks covering:
+   - Estimated Overall Band: (e.g., Band 6.0)
+   - Task Achievement / Response (Band X.X): 1-2 sentences.
+   - Coherence & Cohesion (Band X.X): 1-2 sentences.
+   - Lexical Resource (Band X.X): 1-2 sentences.
+   - Grammatical Range & Accuracy (Band X.X): 1-2 sentences.
+   - Key Sentence Corrections & Band 8+ Upgrades: 3 bullet points quoting exact student errors and providing corrected Band 8+ versions.
+3. "mistakeCounts": An object counting specific recurring error categories found in the essay using ONLY these keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (use 0 if none).`;
+
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `${systemPrompt}\n\nSTUDENT ESSAY:\n${sub.essayText}` }] }],
+          generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+        })
+      }
+    );
+
+    const geminiData = await geminiRes.json();
+    if (!geminiRes.ok) throw new Error(geminiData.error?.message || `Gemini API error (${geminiRes.status})`);
+
+    const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
+    const aiEvaluation = parsed.evaluation || "";
+    const estimatedBand = parsed.estimatedBand || "";
+
+    await updateDoc(doc(db, "submissions", docId), {
+      aiEvaluation,
+      aiMistakesLogged: true
+    });
+
+    if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
+      await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
+    }
+
+    const subIdx = cachedSubmissions.findIndex((s) => s.docId === docId);
+    if (subIdx !== -1) {
+      cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      cachedSubmissions[subIdx].aiMistakesLogged = true;
+    }
+
+    renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+
+    const bandSelect = document.getElementById(`band-${docId}`);
+    if (bandSelect && estimatedBand && [...bandSelect.options].some((o) => o.value === estimatedBand)) {
+      bandSelect.value = estimatedBand;
+    }
+  } catch (err) {
+    alert("Writing evaluation failed: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+};
 
 // ==========================================
 // ATTENDANCE & QR CODE SYSTEM
