@@ -464,6 +464,20 @@ if (assignHwForm) {
     msgEl.textContent = "";
 
     try {
+      const attachInput = document.getElementById("hw-attach-images");
+      let imageUrls = [];
+      if (attachInput && attachInput.files.length > 0) {
+        btn.textContent = "Uploading images...";
+        const uploaded = await uploadMultipleFiles("hw-attach-images");
+        if (!uploaded) {
+          btn.disabled = false;
+          btn.textContent = "Publish Homework 🚀";
+          return;
+        }
+        imageUrls = uploaded;
+        btn.textContent = "Publishing...";
+      }
+
       let activeWeek = "Current Assignments";
       if (typeof ASSIGNMENTS !== 'undefined' && ASSIGNMENTS.length > 0) {
         const upcoming = ASSIGNMENTS.find(a => new Date(a.dueDate) >= new Date());
@@ -474,7 +488,7 @@ if (assignHwForm) {
       for (const studentId of targets) {
         const taskId = `CUSTOMHW_${studentId}_${Date.now()}`;
         await setDoc(doc(db, "customAssignments", taskId), {
-          id: taskId, studentId, skill, title, details, dueDate, week: activeWeek, status: "pending", createdAt: serverTimestamp()
+          id: taskId, studentId, skill, title, details, imageUrls, dueDate, week: activeWeek, status: "pending", createdAt: serverTimestamp()
         });
       }
 
@@ -2101,7 +2115,7 @@ window.startAssignment = function (assignmentId) {
     return {
       id: t.id, title: t.title || t.reason, skill: t.skill, dueDate: t.dueDate, week: t.week || fallbackWeek,
       isDynamic: true, totalQuestions: (t.details?.testCount || 1) * 40, instructions: instructions.trim(),
-      promptText: t.details?.promptText || t.title, isTask1, details: t.details, status: t.status
+      promptText: t.details?.promptText || t.title, isTask1, details: t.details, imageUrls: t.imageUrls || [], status: t.status
     };
   });
 
@@ -2131,13 +2145,18 @@ window.startAssignment = function (assignmentId) {
 
   const leftPane = document.getElementById("runner-prompt-pane");
   const rightPane = document.getElementById("runner-work-pane");
+  const refImagesHtml = (hw.imageUrls && hw.imageUrls.length > 0)
+    ? `<div style="margin-top:14px;display:flex;flex-direction:column;gap:10px;">
+         ${hw.imageUrls.map((url) => `<a href="${url}" target="_blank" rel="noopener"><img src="${url}" alt="Assignment Reference" style="width:100%;max-height:360px;object-fit:contain;border:1px solid var(--border);border-radius:8px;background:#fff;" /></a>`).join("")}
+       </div>`
+    : "";
 
   if (hw.skill === "reading" || hw.skill === "listening") {
     const isDrill = Boolean(hw.isDrill);
     if (isDrill) {
       const drillTypes = hw.drillTypes || [{ key: "TFNG", label: "True / False / Not Given" }, { key: "YNNG", label: "Yes / No / Not Given" }];
       leftPane.innerHTML = `<h3>Drill Instructions</h3><p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
-        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How this works:</strong><br/>Enter how many questions you got right and total questions for each type.</div>`;
+        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How this works:</strong><br/>Enter how many questions you got right and total questions for each type.</div>${refImagesHtml}`;
       const drillRowsHtml = drillTypes.map((item) => `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);flex-wrap:wrap;">
           <span style="font-size:14px;font-weight:600;">${item.label}</span>
@@ -2158,7 +2177,7 @@ window.startAssignment = function (assignmentId) {
         : [ { key: "MCQ", label: "Multiple Choice" }, { key: "MATCHING", label: "Matching" }, { key: "MAP_DIAGRAM", label: "Plan, Map, or Diagram Labelling" }, { key: "FORM_NOTE_TABLE_SUMMARY", label: "Form, Note, Table, Flow-Chart, or Summary Completion" }, { key: "SENTENCE_COMPLETION", label: "Sentence Completion" }, { key: "SHORT_ANSWER", label: "Short-Answer Questions" } ];
       
       leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;">${escapeHtml(hw.instructions)}</p>
-        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How to log your mistakes:</strong><br/>Count how many questions you missed in each category.</div>`;
+        <div style="background:#f8fafc;border:1px solid var(--border);padding:14px;border-radius:8px;font-size:13px;"><strong>How to log your mistakes:</strong><br/>Count how many questions you missed in each category.</div>${refImagesHtml}`;
       const mistakeInputsHtml = mistakeTypes.map((item) => `
         <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
           <span style="font-size:13px;font-weight:600;line-height:1.35;">${item.label}</span>
@@ -2171,15 +2190,18 @@ window.startAssignment = function (assignmentId) {
       document.getElementById("submit-lr-btn").addEventListener("click", () => submitScreenshotHomework(hw));
     }
   } else if (hw.skill === "writing") {
-    const chartHtml = hw.isTask1 || hw.id === "HW-05" ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" multiple required /></div>` : "";
-    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.promptText || hw.title)}</p>`;
+    const hasTeacherChart = hw.imageUrls && hw.imageUrls.length > 0;
+    const chartHtml = (hw.isTask1 || hw.id === "HW-05") && !hasTeacherChart
+      ? `<div class="form-group"><label>Upload Line Graph / Chart Image (Required)</label><input type="file" id="writing-chart-file" accept="image/*" multiple required /></div>`
+      : "";
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.promptText || hw.title)}</p>${refImagesHtml}`;
     rightPane.innerHTML = `<h3>Your Essay / Report Response</h3>
       ${chartHtml}
       <div class="form-group"><label>Type your response here</label><textarea id="writing-essay-input" rows="12" style="width:100%;padding:12px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:14px;"></textarea></div>
       <button class="btn btn-primary btn-full" id="submit-writing-btn">Submit Writing</button>`;
     document.getElementById("submit-writing-btn").addEventListener("click", () => submitWritingHomework(hw));
   } else if (hw.skill === "speaking") {
-    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>${refImagesHtml}`;
     rightPane.innerHTML = `
       <h3>Record Speaking Answer</h3>
       <div style="text-align:center;padding:24px 0;">
@@ -2194,7 +2216,7 @@ window.startAssignment = function (assignmentId) {
       <button class="btn btn-primary btn-full" id="submit-speaking-btn" onclick="submitSpeakingHomework('${hw.id}')">Upload & Submit Speaking</button>
     `;
   } else if (hw.skill === "grammar") {
-    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>${refImagesHtml}`;
     rightPane.innerHTML = `
       <h3>Upload Completed Pages</h3>
       <div class="form-group"><label>Workbook Photo / Screenshot</label><input type="file" id="gram-file" accept="image/*" multiple required /></div>
@@ -2203,7 +2225,7 @@ window.startAssignment = function (assignmentId) {
     `;
     document.getElementById("submit-gram-btn").addEventListener("click", () => submitGrammarHomework(hw));
   } else {
-    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>`;
+    leftPane.innerHTML = `<h3>Instructions</h3><p class="passage-box" style="margin-bottom:16px;white-space:pre-line;">${escapeHtml(hw.instructions)}</p>${refImagesHtml}`;
     rightPane.innerHTML = `
       <h3>Submit Task Response</h3>
       <div class="form-group"><label>Attach Photo / Screenshot (Optional)</label><input type="file" id="other-file" accept="image/*" multiple /></div>
@@ -2286,7 +2308,8 @@ async function submitWritingHomework(hw) {
   const text = document.getElementById("writing-essay-input").value.trim();
   const fileInput = document.getElementById("writing-chart-file");
   if (!text) return alert("Please write your essay or report before submitting.");
-  if ((hw.id === "HW-05" || hw.isTask1) && !fileInput?.files.length) return alert("Please upload an image of the line graph you wrote about.");
+  const hasTeacherChart = hw.imageUrls && hw.imageUrls.length > 0;
+  if ((hw.id === "HW-05" || hw.isTask1) && !hasTeacherChart && !fileInput?.files.length) return alert("Please upload an image of the line graph you wrote about.");
 
   const btn = document.getElementById("submit-writing-btn");
   btn.disabled = true; btn.textContent = "Submitting...";
