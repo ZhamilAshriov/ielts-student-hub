@@ -2031,7 +2031,6 @@ window.startPunishmentRunner = async function (taskId) {
   activeDynamicTask = snap.data();
   activeDynamicCollection = "punishments";
 
-  document.getElementById("student-punishments-container").parentElement.classList.add("hidden");
   document.getElementById("student-punishments-container").classList.add("hidden");
   document.getElementById("punishment-runner-view").classList.remove("hidden");
 
@@ -2852,10 +2851,11 @@ async function renderStudentPunishmentsList() {
 }
 
 document.getElementById("back-to-punishments-btn")?.addEventListener("click", () => {
+  stopActiveRecordingCleanup();
   document.getElementById("punishment-runner-view").classList.add("hidden");
-  document.getElementById("student-punishments-container").parentElement.classList.remove("hidden");
   document.getElementById("student-punishments-container").classList.remove("hidden");
-  initStudentData();
+  renderStudentPunishmentsList();
+  updateDashboardUI();
 });
 
 // ==========================================
