@@ -1072,12 +1072,17 @@ function renderTeacherGradingQueue(students, submissions) {
 
     if (sub.skill === "reading" || sub.skill === "listening") {
       const mistakesSummary = Object.entries(sub.mistakeCounts || {}).filter(([, count]) => count > 0).map(([type, count]) => `<span class="q-tag">${MISTAKE_LABELS[type] || type}: ${count} wrong</span>`).join(" ");
+      const perSetHtml = (Array.isArray(sub.setScores) && sub.setScores.length > 1)
+        ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">${sub.setScores.map((sc, i) => `<span class="badge badge-blue">Test ${i + 1}: ${sc}/40 (Band ${rawToIeltsBand(sc, 40)})</span>`).join("")}</div>`
+        : "";
       contentHtml = `
         <div style="margin:10px 0;">
-          <p style="font-size:14px;margin-bottom:8px;"><strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} ${sub.bandScore ? `(Auto Band ${sub.bandScore})` : `(Drill — Weakest Areas Only)`}</p>
+          <p style="font-size:14px;margin-bottom:8px;"><strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} ${sub.bandScore ? `(Avg Band ${sub.bandScore})` : `(Drill — Weakest Areas Only)`}</p>
+          ${perSetHtml}
           ${mistakesSummary ? `<div style="margin-bottom:10px;">${mistakesSummary}</div>` : ""}
           <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
         </div>
+      `;
       `;
     } else if (sub.skill === "writing") {
       contentHtml = `<div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div><div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>`;
@@ -1632,7 +1637,8 @@ document.getElementById("practice-all-btn")?.addEventListener("click", () => {
 function getDynamicRunnerHTML(task, type) {
   let rightHtml = "";
   if (task.skill === "listening" || task.skill === "reading") {
-    const totalQ = (task.details?.testCount || 1) * 40;
+    const testCount = Math.max(1, Number(task.details?.testCount) || 1);
+    const totalQ = testCount * 40;
     const mistakeTypes = task.skill === "reading"
       ? [
           { key: "MCQ", label: "Multiple Choice" },
@@ -1665,11 +1671,16 @@ function getDynamicRunnerHTML(task, type) {
         <input type="number" class="dynamic-mistake-input" data-type="${item.key}" min="0" max="${totalQ}" value="0" style="width:72px;flex-shrink:0;padding:6px 8px;text-align:center;" />
       </div>`).join("");
 
+    const testScoreInputsHtml = Array.from({ length: testCount }, (_, idx) => {
+      const label = testCount > 1 ? `Test Set ${idx + 1} — Correct Answers (out of 40)` : `Your Correct Answers (out of 40)`;
+      return `<div class="form-group"><label>${label}</label><input type="number" class="dynamic-lr-set-score" data-set="${idx + 1}" min="0" max="40" required /></div>`;
+    }).join("");
+
     rightHtml = `
       <h3>Submit Score & Screenshot</h3>
-      <div class="form-group"><label>Your Correct Answers (out of ${totalQ})</label><input type="number" id="dynamic-lr-score" min="0" max="${totalQ}" required /></div>
+      ${testScoreInputsHtml}
       <div class="form-group"><label>Result Screenshot (PNG / JPG)</label><input type="file" id="dynamic-lr-file" accept="image/*" multiple required /></div>
-      <div class="form-group"><label>Mistakes by Question Type</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
+      <div class="form-group"><label>Mistakes by Question Type (Combined Total)</label><div style="border:1px solid var(--border);border-radius:8px;padding:2px 12px;max-height:300px;overflow-y:auto;">${mistakeInputsHtml}</div></div>
       <button class="btn btn-primary btn-full" onclick="submitDynamicScreenshot(${totalQ})">Upload Screenshot & Submit Proof</button>
     `;
   } else if (task.skill === "speaking") {
@@ -1789,8 +1800,19 @@ async function uploadMultipleFiles(fileInputId) {
 
 window.submitDynamicScreenshot = async function(totalQ) {
   const fileInput = document.getElementById("dynamic-lr-file");
-  const rawScore = Number(document.getElementById("dynamic-lr-score").value);
-  if (!fileInput.files.length || isNaN(rawScore)) return alert("Please enter your score and attach a screenshot.");
+  const scoreInputs = Array.from(document.querySelectorAll(".dynamic-lr-set-score"));
+  if (!fileInput.files.length) return alert("Please attach your result screenshot(s).");
+
+  const setScores = [];
+  for (let i = 0; i < scoreInputs.length; i++) {
+    const valStr = scoreInputs[i].value;
+    const val = Number(valStr);
+    if (valStr === "" || isNaN(val) || val < 0 || val > 40) {
+      return alert(`Please enter a valid score between 0 and 40 for Test Set ${i + 1}.`);
+    }
+    setScores.push(val);
+  }
+  const rawScore = setScores.reduce((sum, n) => sum + n, 0);
 
   const mistakeCounts = {};
   const updatedMistakes = { ...(currentStudentProfile.permanentMistakes || {}) };
@@ -1807,9 +1829,13 @@ window.submitDynamicScreenshot = async function(totalQ) {
   await updateDoc(doc(db, "users", currentStudentId), { permanentMistakes: updatedMistakes });
   currentStudentProfile.permanentMistakes = updatedMistakes;
 
+  const setBreakdownText = setScores.length > 1
+    ? ` (${setScores.map((s, i) => `Set ${i + 1}: ${s}/40 [Band ${rawToIeltsBand(s, 40)}]`).join(", ")})`
+    : "";
+
   const submissionData = {
     status: "submitted",
-    submission: { scoreText: `${rawScore} / ${totalQ}`, screenshotUrls: urls, mistakeCounts },
+    submission: { scoreText: `${rawScore} / ${totalQ}${setBreakdownText}`, setScores, screenshotUrls: urls, mistakeCounts },
     submittedAt: serverTimestamp()
   };
 
@@ -1818,7 +1844,7 @@ window.submitDynamicScreenshot = async function(totalQ) {
   await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
     assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: activeDynamicTask.skill, status: "submitted",
     isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(),
-    rawScore, totalQuestions: totalQ, bandScore, screenshotUrls: urls, mistakeCounts
+    rawScore, totalQuestions: totalQ, setScores, bandScore, screenshotUrls: urls, mistakeCounts
   });
 
   await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), submissionData);
