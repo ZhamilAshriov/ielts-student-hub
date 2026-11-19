@@ -1087,7 +1087,25 @@ function renderTeacherGradingQueue(students, submissions) {
     } else if (sub.skill === "writing") {
       contentHtml = `<div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div><div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>`;
     } else if (sub.skill === "speaking") {
-      contentHtml = `<div style="margin:12px 0;"><audio controls src="${sub.audioUrl}" style="width:100%;"></audio></div>`;
+      const savedAiHtml = (sub.transcript || sub.aiEvaluation)
+        ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
+             ${sub.transcript ? `<div style="margin-bottom:10px;"><strong style="color:var(--primary);">📝 Verbatim Transcript:</strong><p style="margin:4px 0 0;white-space:pre-line;line-height:1.5;">${escapeHtml(sub.transcript)}</p></div>` : ""}
+             ${sub.aiEvaluation ? `<div><strong style="color:var(--primary);">🎯 IELTS Speaking Evaluation:</strong><div style="margin-top:4px;white-space:pre-line;line-height:1.55;">${escapeHtml(sub.aiEvaluation)}</div></div>` : ""}
+           </div>`
+        : "";
+
+      contentHtml = `
+        <div style="margin:12px 0;">
+          <audio controls src="${sub.audioUrl}" style="width:100%;margin-bottom:8px;"></audio>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <button type="button" class="btn btn-outline btn-sm" id="ai-spk-btn-${sub.docId}" onclick="window.transcribeAndEvaluateSpeaking('${sub.docId}')">
+              ${sub.aiEvaluation ? "🔄 Re-run AI Transcribe & Evaluate" : "✨ Transcribe & Evaluate (Gemini)"}
+            </button>
+            <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;color:var(--muted);" onclick="window.setTeacherGeminiKey()">🔑 Set API Key</button>
+          </div>
+          ${savedAiHtml}
+        </div>
+      `;
     } else if (sub.skill === "grammar") {
       contentHtml = `
         <div style="margin:10px 0;">
@@ -1186,6 +1204,133 @@ window.deleteSubmission = async function (docId, assignmentId) {
   cachedSubmissions = cachedSubmissions.filter((s) => s.docId !== docId);
   renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
   renderTeacherHwMatrix(cachedStudents, cachedSubmissions);
+};
+
+window.setTeacherGeminiKey = function () {
+  const existing = localStorage.getItem("ielts_hub_gemini_key") || "";
+  const input = prompt(
+    "Paste your Google AI Studio Gemini API key (saved only in this browser's localStorage):",
+    existing
+  );
+  if (input === null) return null;
+  const trimmed = input.trim();
+  if (trimmed) {
+    localStorage.setItem("ielts_hub_gemini_key", trimmed);
+    alert("Gemini API key saved to this browser!");
+    return trimmed;
+  } else {
+    localStorage.removeItem("ielts_hub_gemini_key");
+    alert("Gemini API key cleared.");
+    return null;
+  }
+};
+
+window.transcribeAndEvaluateSpeaking = async function (docId) {
+  const sub = cachedSubmissions.find((s) => s.docId === docId);
+  if (!sub || !sub.audioUrl) return alert("No audio recording found for this submission.");
+
+  let apiKey = localStorage.getItem("ielts_hub_gemini_key");
+  if (!apiKey) {
+    apiKey = window.setTeacherGeminiKey();
+    if (!apiKey) return;
+  }
+
+  const btn = document.getElementById(`ai-spk-btn-${docId}`);
+  const origText = btn ? btn.textContent : "";
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "⏳ Fetching audio...";
+  }
+
+  try {
+    // 1. Download the student's audio file from Cloudinary and convert to Base64
+    const audioRes = await fetch(sub.audioUrl);
+    if (!audioRes.ok) throw new Error("Could not download audio file from Cloudinary.");
+    const audioBlob = await audioRes.blob();
+    const mimeType = audioBlob.type || "audio/webm";
+
+    const base64Audio = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result.split(",")[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(audioBlob);
+    });
+
+    if (btn) btn.textContent = "✨ Gemini analyzing...";
+
+    // 2. Look up the speaking prompt/questions if available for context
+    const taskObj = cachedTeacherHw.find((h) => h.id === sub.assignmentId)
+      || cachedTeacherPunishments.find((p) => p.id === sub.assignmentId)
+      || ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
+    const promptContext = taskObj?.details?.questions || taskObj?.instructions || taskObj?.title || "IELTS Speaking task";
+
+    const systemPrompt = `You are a strict, certified IELTS Speaking examiner.
+Listen carefully to the student's audio response for this prompt: "${promptContext}".
+
+Return your response in valid JSON with two string fields:
+1. "transcript": A verbatim transcription of everything the student said, preserving filler words (um, uh, like), pauses (...), and self-corrections so the teacher can inspect fluency.
+2. "evaluation": A concise, structured IELTS Speaking assessment formatted cleanly with line breaks covering:
+   - Estimated Overall Band: (e.g., Band 6.0)
+   - Fluency & Coherence (Band X.X): 1-2 sentences on pace, hesitation, and linking.
+   - Lexical Resource (Band X.X): 1-2 sentences on vocabulary range and collocations.
+   - Grammatical Range & Accuracy (Band X.X): 1-2 sentences on sentence structures and specific errors heard.
+   - Pronunciation (Band X.X): 1-2 sentences on clarity, word stress, and intonation.
+   - Key Corrections & Upgrades: 2-3 bullet points quoting exact mistakes from the audio and giving Band 8+ alternatives.`;
+
+    // 3. Call Gemini 2.5 Flash with inline audio
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: systemPrompt },
+                { inline_data: { mime_type: mimeType, data: base64Audio } }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json",
+            temperature: 0.2
+          }
+        })
+      }
+    );
+
+    const geminiData = await geminiRes.json();
+    if (!geminiRes.ok) {
+      throw new Error(geminiData.error?.message || `Gemini API error (${geminiRes.status})`);
+    }
+
+    const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const parsed = JSON.parse(rawText);
+    const transcript = parsed.transcript || "(No speech detected)";
+    const aiEvaluation = parsed.evaluation || "";
+
+    // 4. Save to Firestore so you never have to re-run it
+    await updateDoc(doc(db, "submissions", docId), {
+      transcript,
+      aiEvaluation
+    });
+
+    // 5. Update local cache and re-render the queue
+    const subIdx = cachedSubmissions.findIndex((s) => s.docId === docId);
+    if (subIdx !== -1) {
+      cachedSubmissions[subIdx].transcript = transcript;
+      cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+    }
+
+    renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
+  } catch (err) {
+    alert("Transcription/Evaluation failed: " + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
 };
 
 window.quickAssignPunishment = function (studentId, skill) {
