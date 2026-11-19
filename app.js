@@ -80,7 +80,8 @@ let cachedTeacherPunishments = [];
 
 let mediaRecorder = null;
 let recordedChunks = [];
-let recordedAudioBlob = null;
+let recordedAudioList = []; // Array of { blob, url, duration }
+let recReplaceLast = false;
 let recInterval = null;
 let recSeconds = 0;
 
@@ -1108,6 +1109,16 @@ function renderTeacherGradingQueue(students, submissions) {
         ${savedWritingAiHtml}
       `;
     } else if (sub.skill === "speaking") {
+      const allAudios = Array.isArray(sub.audioUrls) && sub.audioUrls.length > 0
+        ? sub.audioUrls
+        : (sub.audioUrl ? [sub.audioUrl] : []);
+      const audioPlayersHtml = allAudios.map((url, idx) => `
+        <div style="margin-bottom:8px;">
+          ${allAudios.length > 1 ? `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">Recording ${idx + 1} of ${allAudios.length}</div>` : ""}
+          <audio controls src="${url}" style="width:100%;"></audio>
+        </div>
+      `).join("");
+
       const savedAiHtml = (sub.transcript || sub.aiEvaluation)
         ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
              ${sub.transcript ? `<div style="margin-bottom:10px;"><strong style="color:var(--primary);">📝 Verbatim Transcript:</strong><p style="margin:4px 0 0;white-space:pre-line;line-height:1.5;">${escapeHtml(sub.transcript)}</p></div>` : ""}
@@ -1117,7 +1128,7 @@ function renderTeacherGradingQueue(students, submissions) {
 
       contentHtml = `
         <div style="margin:12px 0;">
-          <audio controls src="${sub.audioUrl}" style="width:100%;margin-bottom:8px;"></audio>
+          ${audioPlayersHtml}
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <button type="button" class="btn btn-outline btn-sm" id="ai-spk-btn-${sub.docId}" onclick="window.transcribeAndEvaluateSpeaking('${sub.docId}')">
               ${sub.aiEvaluation ? "🔄 Re-run AI Transcribe & Evaluate" : "✨ Transcribe & Evaluate (Gemini)"}
@@ -1248,7 +1259,10 @@ window.setTeacherGeminiKey = function () {
 
 window.transcribeAndEvaluateSpeaking = async function (docId) {
   const sub = cachedSubmissions.find((s) => s.docId === docId);
-  if (!sub || !sub.audioUrl) return alert("No audio recording found for this submission.");
+  const allAudios = Array.isArray(sub?.audioUrls) && sub.audioUrls.length > 0
+    ? sub.audioUrls
+    : (sub?.audioUrl ? [sub.audioUrl] : []);
+  if (!sub || allAudios.length === 0) return alert("No audio recording found for this submission.");
 
   let apiKey = localStorage.getItem("ielts_hub_gemini_key");
   if (!apiKey) {
@@ -1264,18 +1278,22 @@ window.transcribeAndEvaluateSpeaking = async function (docId) {
   }
 
   try {
-    // 1. Download the student's audio file from Cloudinary and convert to Base64
-    const audioRes = await fetch(sub.audioUrl);
-    if (!audioRes.ok) throw new Error("Could not download audio file from Cloudinary.");
-    const audioBlob = await audioRes.blob();
-    const mimeType = audioBlob.type || "audio/webm";
-
-    const base64Audio = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result.split(",")[1]);
-      reader.onerror = reject;
-      reader.readAsDataURL(audioBlob);
-    });
+    // 1. Download all student audio recordings from Cloudinary and convert to Base64
+    const audioParts = [];
+    for (let i = 0; i < allAudios.length; i++) {
+      const audioRes = await fetch(allAudios[i]);
+      if (!audioRes.ok) throw new Error(`Could not download Recording ${i + 1} from Cloudinary.`);
+      const audioBlob = await audioRes.blob();
+      const mimeType = audioBlob.type || "audio/webm";
+      const base64Audio = await new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result.split(",")[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(audioBlob);
+      });
+      if (allAudios.length > 1) audioParts.push({ text: `[Recording ${i + 1} of ${allAudios.length}]` });
+      audioParts.push({ inline_data: { mime_type: mimeType, data: base64Audio } });
+    }
 
     if (btn) btn.textContent = "✨ Gemini analyzing...";
 
@@ -1309,7 +1327,7 @@ Return your response in valid JSON with two string fields:
             {
               parts: [
                 { text: systemPrompt },
-                { inline_data: { mime_type: mimeType, data: base64Audio } }
+                ...audioParts
               ]
             }
           ],
@@ -1961,11 +1979,13 @@ function getDynamicRunnerHTML(task, type) {
       <div style="text-align:center;padding:24px 0;">
         <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
         <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
-        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
-          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
-          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+          <button type="button" class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording(false)">🔴 Start Recording</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-rerecord-rec" onclick="startBrowserRecording(true)">↻ Re-record Last</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-addmore-rec" onclick="startBrowserRecording(false)" style="color:var(--primary);border-color:#bfdbfe;">➕ Record One More</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
         </div>
-        <div id="rec-preview-area" class="hidden" style="margin-top:16px;"><audio id="rec-audio-preview" controls style="width:100%;"></audio></div>
+        <div id="rec-preview-area" class="hidden" style="margin-top:16px;text-align:left;"></div>
       </div>
       <button class="btn btn-primary btn-full" onclick="submitDynamicAudio()">Upload & Submit Speaking</button>
     `;
@@ -1997,6 +2017,7 @@ function getDynamicRunnerHTML(task, type) {
 }
 
 window.startCustomHwRunner = async function (taskId) {
+  recordedAudioList = [];
   const snap = await getDoc(doc(db, "customAssignments", taskId));
   if (!snap.exists()) return;
   activeDynamicTask = snap.data();
@@ -2026,6 +2047,7 @@ window.startCustomHwRunner = async function (taskId) {
 };
 
 window.startPunishmentRunner = async function (taskId) {
+  recordedAudioList = [];
   const snap = await getDoc(doc(db, "punishments", taskId));
   if (!snap.exists()) return;
   activeDynamicTask = snap.data();
@@ -2160,32 +2182,37 @@ window.submitDynamicWriting = async function(isTask1) {
 };
 
 window.submitDynamicAudio = async function () {
-  if (!recordedAudioBlob) return alert("Please record your audio first.");
-  const formData = new FormData();
-  formData.append("file", recordedAudioBlob, `task_${activeDynamicTask.id}.webm`);
-  formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+  if (recordedAudioList.length === 0) return alert("Please record your audio first.");
+  const btn = document.querySelector("#hw-custom-runner-right .btn-primary, #pun-runner-right .btn-primary");
+  if (btn) { btn.disabled = true; btn.textContent = `Uploading ${recordedAudioList.length} recording(s)...`; }
 
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
-  const data = await res.json();
-  if (!data.secure_url) return alert("Audio upload failed.");
+  try {
+    const audioUrls = await uploadAllRecordedAudio(`task_${activeDynamicTask.id}`);
 
-  await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
-    assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "speaking", status: "submitted",
-    isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), audioUrl: data.secure_url
-  });
+    await setDoc(doc(db, "submissions", `${activeDynamicTask.id}_${currentStudentId}`), {
+      assignmentId: activeDynamicTask.id, studentId: currentStudentId, skill: "speaking", status: "submitted",
+      isLate: new Date() > new Date(activeDynamicTask.dueDate), submittedAt: serverTimestamp(), audioUrl: audioUrls[0], audioUrls
+    });
 
-  await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), { status: "submitted", submission: { audioUrl: data.secure_url }, submittedAt: serverTimestamp() });
-  
-  alert("Speaking task submitted!");
-  if (activeDynamicCollection === "customAssignments") {
-    studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
-    document.getElementById("back-to-hw-custom-btn").click();
-  } else {
-    const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
-    if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
-    document.getElementById("back-to-punishments-btn").click();
+    await updateDoc(doc(db, activeDynamicCollection, activeDynamicTask.id), {
+      status: "submitted", submission: { audioUrl: audioUrls[0], audioUrls }, submittedAt: serverTimestamp()
+    });
+    recordedAudioList = [];
+
+    alert("Speaking task submitted!");
+    if (activeDynamicCollection === "customAssignments") {
+      studentSubmissionsMap[activeDynamicTask.id] = { status: "submitted" };
+      document.getElementById("back-to-hw-custom-btn").click();
+    } else {
+      const idx = cachedStudentPunishments.findIndex(t => t.id === activeDynamicTask.id);
+      if (idx !== -1) cachedStudentPunishments[idx].status = "submitted";
+      document.getElementById("back-to-punishments-btn").click();
+    }
+    updateDashboardUI();
+  } catch (err) {
+    alert("Audio upload failed: " + err.message);
+    if (btn) { btn.disabled = false; btn.textContent = "Upload & Submit Speaking"; }
   }
-  updateDashboardUI();
 };
 
 window.submitDynamicGrammar = async function() {
@@ -2398,6 +2425,7 @@ const isPastDue = now > dueDateObj;
 }
 
 window.startAssignment = function (assignmentId) {
+  recordedAudioList = [];
   let fallbackWeek = "Current Assignments";
   if (typeof ASSIGNMENTS !== 'undefined' && ASSIGNMENTS.length > 0) {
     const upcoming = ASSIGNMENTS.find(a => new Date(a.dueDate) >= new Date());
@@ -2504,11 +2532,13 @@ window.startAssignment = function (assignmentId) {
       <div style="text-align:center;padding:24px 0;">
         <div id="rec-status-label" style="font-weight:600;margin-bottom:12px;">Ready to record</div>
         <div id="rec-timer-display" style="font-size:32px;font-weight:700;font-family:monospace;margin-bottom:16px;">00:00</div>
-        <div style="display:flex;justify-content:center;gap:12px;margin-bottom:20px;">
-          <button class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording()">🔴 Start Recording</button>
-          <button class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
+        <div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;margin-bottom:20px;">
+          <button type="button" class="btn btn-primary" id="btn-start-rec" onclick="startBrowserRecording(false)">🔴 Start Recording</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-rerecord-rec" onclick="startBrowserRecording(true)">↻ Re-record Last</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-addmore-rec" onclick="startBrowserRecording(false)" style="color:var(--primary);border-color:#bfdbfe;">➕ Record One More</button>
+          <button type="button" class="btn btn-outline hidden" id="btn-stop-rec" onclick="stopBrowserRecording()" style="color:var(--danger);border-color:#fecaca;">⏹ Stop Recording</button>
         </div>
-        <div id="rec-preview-area" class="hidden" style="margin-top:16px;"><audio id="rec-audio-preview" controls style="width:100%;"></audio></div>
+        <div id="rec-preview-area" class="hidden" style="margin-top:16px;text-align:left;"></div>
       </div>
       <button class="btn btn-primary btn-full" id="submit-speaking-btn" onclick="submitSpeakingHomework('${hw.id}')">Upload & Submit Speaking</button>
     `;
@@ -2731,26 +2761,89 @@ window.openAnalysisPage = function (assignmentId) {
     : `<p class="muted">No specific question-type mistakes logged for this test.</p>`;
 };
 
-window.startBrowserRecording = async function () {
+function renderRecordedClipsList() {
+  const previewArea = document.getElementById("rec-preview-area");
+  const startBtn = document.getElementById("btn-start-rec");
+  const rerecordBtn = document.getElementById("btn-rerecord-rec");
+  const addMoreBtn = document.getElementById("btn-addmore-rec");
+  if (!previewArea) return;
+
+  if (recordedAudioList.length === 0) {
+    previewArea.classList.add("hidden");
+    previewArea.innerHTML = "";
+    if (startBtn) {
+      startBtn.textContent = "🔴 Start Recording";
+      startBtn.classList.remove("hidden");
+    }
+    rerecordBtn?.classList.add("hidden");
+    addMoreBtn?.classList.add("hidden");
+    return;
+  }
+
+  previewArea.classList.remove("hidden");
+  previewArea.innerHTML = recordedAudioList.map((clip, idx) => `
+    <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;">
+        <strong>🎙️ Recording ${idx + 1} <span class="muted" style="font-weight:400;">(${clip.duration})</span></strong>
+        <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger);border-color:#fecaca;" onclick="window.removeRecordedClip(${idx})">✕ Remove</button>
+      </div>
+      <audio controls src="${clip.url}" style="width:100%;height:36px;"></audio>
+    </div>
+  `).join("");
+
+  startBtn?.classList.add("hidden");
+  rerecordBtn?.classList.remove("hidden");
+  if (addMoreBtn) {
+    if (recordedAudioList.length < 5) addMoreBtn.classList.remove("hidden");
+    else addMoreBtn.classList.add("hidden");
+  }
+}
+
+window.removeRecordedClip = function (idx) {
+  recordedAudioList.splice(idx, 1);
+  renderRecordedClipsList();
+  const statusEl = document.getElementById("rec-status-label");
+  if (statusEl) {
+    statusEl.textContent = recordedAudioList.length > 0
+      ? `${recordedAudioList.length} recording(s) ready — re-record last or add another`
+      : "Ready to record";
+  }
+};
+
+window.startBrowserRecording = async function (replaceLast = false) {
+  if (!replaceLast && recordedAudioList.length >= 5) {
+    return alert("Maximum 5 recordings allowed per submission.");
+  }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recReplaceLast = replaceLast;
     recordedChunks = [];
-    recordedAudioBlob = null;
     mediaRecorder = new MediaRecorder(stream);
     mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
     mediaRecorder.onstop = () => {
-      recordedAudioBlob = new Blob(recordedChunks, { type: "audio/webm" });
-      const audioUrl = URL.createObjectURL(recordedAudioBlob);
-      document.getElementById("rec-audio-preview").src = audioUrl;
-      document.getElementById("rec-preview-area").classList.remove("hidden");
+      const blob = new Blob(recordedChunks, { type: "audio/webm" });
+      const url = URL.createObjectURL(blob);
+      const mins = String(Math.floor(recSeconds / 60)).padStart(2, "0");
+      const secs = String(recSeconds % 60).padStart(2, "0");
+      const clipObj = { blob, url, duration: `${mins}:${secs}` };
+
+      if (recReplaceLast && recordedAudioList.length > 0) {
+        recordedAudioList[recordedAudioList.length - 1] = clipObj;
+      } else {
+        recordedAudioList.push(clipObj);
+      }
+
+      renderRecordedClipsList();
       stream.getTracks().forEach((track) => track.stop());
     };
     mediaRecorder.start();
     recSeconds = 0;
-    document.getElementById("rec-status-label").innerHTML = `<span class="rec-dot"></span> Recording in progress...`;
-    document.getElementById("btn-start-rec").classList.add("hidden");
-    document.getElementById("btn-stop-rec").classList.remove("hidden");
-    document.getElementById("rec-preview-area").classList.add("hidden");
+    const takeNum = replaceLast && recordedAudioList.length > 0 ? recordedAudioList.length : recordedAudioList.length + 1;
+    document.getElementById("rec-status-label").innerHTML = `<span class="rec-dot"></span> Recording Take #${takeNum}...`;
+    document.getElementById("btn-start-rec")?.classList.add("hidden");
+    document.getElementById("btn-rerecord-rec")?.classList.add("hidden");
+    document.getElementById("btn-addmore-rec")?.classList.add("hidden");
+    document.getElementById("btn-stop-rec")?.classList.remove("hidden");
 
     recInterval = setInterval(() => {
       recSeconds++;
@@ -2764,10 +2857,8 @@ window.startBrowserRecording = async function () {
 window.stopBrowserRecording = function () {
   if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
   clearInterval(recInterval);
-  document.getElementById("rec-status-label").textContent = "Recording captured — listen below or re-record";
-  document.getElementById("btn-stop-rec").classList.add("hidden");
-  document.getElementById("btn-start-rec").textContent = "↻ Re-record";
-  document.getElementById("btn-start-rec").classList.remove("hidden");
+  document.getElementById("rec-status-label").textContent = "Recording saved — listen below, re-record last, or add one more";
+  document.getElementById("btn-stop-rec")?.classList.add("hidden");
 };
 
 function stopActiveRecordingCleanup() {
@@ -2775,35 +2866,45 @@ function stopActiveRecordingCleanup() {
   clearInterval(recInterval);
 }
 
-window.submitSpeakingHomework = async function (assignmentId) {
-  if (!recordedAudioBlob) return alert("Please record your speaking answer first.");
-  const btn = document.getElementById("submit-speaking-btn") || document.getElementById("pun-submit-speaking-btn");
-  btn.disabled = true; btn.textContent = "Uploading audio...";
-
-  try {
-    const formData = new FormData(); formData.append("file", recordedAudioBlob, `${assignmentId}_${currentStudentId}.webm`); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+async function uploadAllRecordedAudio(prefix) {
+  const uploadedUrls = [];
+  for (let i = 0; i < recordedAudioList.length; i++) {
+    const formData = new FormData();
+    formData.append("file", recordedAudioList[i].blob, `${prefix}_part${i + 1}_${currentStudentId}.webm`);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
     const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
     const data = await res.json();
-    if (!data.secure_url) throw new Error(data.error?.message || "Upload failed");
+    if (!data.secure_url) throw new Error(data.error?.message || `Audio #${i + 1} upload failed`);
+    uploadedUrls.push(data.secure_url);
+  }
+  return uploadedUrls;
+}
 
-    // We don't have hw object if it's from punish, so fetch it dynamically or just use current date
+window.submitSpeakingHomework = async function (assignmentId) {
+  if (recordedAudioList.length === 0) return alert("Please record your speaking answer first.");
+  const btn = document.getElementById("submit-speaking-btn") || document.getElementById("pun-submit-speaking-btn");
+  btn.disabled = true; btn.textContent = `Uploading ${recordedAudioList.length} recording(s)...`;
+
+  try {
+    const audioUrls = await uploadAllRecordedAudio(assignmentId);
     const submissionData = {
-      assignmentId: assignmentId, studentId: currentStudentId, skill: "speaking", status: "submitted",
-      isLate: false, submittedAt: serverTimestamp(), audioUrl: data.secure_url
+      assignmentId, studentId: currentStudentId, skill: "speaking", status: "submitted",
+      isLate: false, submittedAt: serverTimestamp(), audioUrl: audioUrls[0], audioUrls
     };
 
     if (assignmentId.includes("CUSTOMHW")) await updateDoc(doc(db, "customAssignments", assignmentId), { status: "submitted" });
-    if (assignmentId.includes("PUN_")) await updateDoc(doc(db, "punishments", assignmentId), { status: "submitted", submission: { audioUrl: data.secure_url } });
+    if (assignmentId.includes("PUN_")) await updateDoc(doc(db, "punishments", assignmentId), { status: "submitted", submission: { audioUrl: audioUrls[0], audioUrls } });
 
     await setDoc(doc(db, "submissions", `${assignmentId}_${currentStudentId}`), submissionData);
     studentSubmissionsMap[assignmentId] = submissionData;
+    recordedAudioList = [];
     updateDashboardUI();
-    alert("Speaking recording uploaded!");
+    alert("Speaking recording(s) uploaded!");
     if (assignmentId.includes("PUN_")) document.getElementById("back-to-punishments-btn").click();
     else showHomeworkListView();
   } catch (err) {
     alert("Audio upload error: " + err.message);
-    btn.disabled = false; btn.textContent = "Upload & Submit Recording";
+    btn.disabled = false; btn.textContent = "Upload & Submit Speaking";
   }
 };
 
