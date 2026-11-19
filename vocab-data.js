@@ -1,4 +1,4 @@
-// LESSON VOCABULARY DECKS — TOPIC: GRATITUDE & APPRECIATION
+// LESSON VOCABULARY DECKS — TOPIC: GRATITUDE & REPUTATION
 
 export const VOCAB_DECKS = [
   {
@@ -307,6 +307,339 @@ export const VOCAB_DECKS = [
         word: "support someone through difficult times",
         definition: "To help and encourage someone during a hard period in their life.",
         example: "My family supported me through difficult times when I was struggling with my studies."
+      }
+    ]
+  },
+  {
+    deckId: "reputation-nouns-adjs",
+    title: "Reputation: Key Nouns & Adjectives",
+    cards: [
+      // KEY NOUNS
+      {
+        id: "rep-1",
+        word: "reputation (n.)",
+        definition: "What people generally think of you or a company.",
+        example: "Building a strong reputation takes years of consistent effort, yet it can be lost overnight."
+      },
+      {
+        id: "rep-2",
+        word: "credibility (n.)",
+        definition: "The quality of being trusted and believed.",
+        example: "The journalist lost her credibility after publishing an unverified news report."
+      },
+      {
+        id: "rep-3",
+        word: "integrity (n.)",
+        definition: "Being honest, with strong moral principles.",
+        example: "Voters expect elected leaders to act with integrity and transparency at all times."
+      },
+      {
+        id: "rep-4",
+        word: "prestige (n.)",
+        definition: "High status and respect linked to success.",
+        example: "Graduating from a university with international prestige can open doors to competitive careers."
+      },
+      {
+        id: "rep-5",
+        word: "standing (n.)",
+        definition: "Your position or status in a community or profession.",
+        example: "Her charitable work significantly improved her standing in the local community."
+      },
+      {
+        id: "rep-6",
+        word: "renown (n.)",
+        definition: "Fame for something good (formal).",
+        example: "The architect achieved worldwide renown for designing sustainable public buildings."
+      },
+      {
+        id: "rep-7",
+        word: "notoriety (n.)",
+        definition: "Fame for something bad.",
+        example: "The company gained notoriety for polluting local rivers to cut production costs."
+      },
+      {
+        id: "rep-8",
+        word: "goodwill (n.)",
+        definition: "Friendly feelings and support from others.",
+        example: "Offering free repairs to affected customers generated tremendous goodwill toward the brand."
+      },
+      {
+        id: "rep-9",
+        word: "track record (n.)",
+        definition: "Past achievements or performance used to judge someone.",
+        example: "Investors prefer backing founders who have a proven track record of delivering results."
+      },
+      {
+        id: "rep-10",
+        word: "image (n.)",
+        definition: "The way the public sees someone or an organization.",
+        example: "Many corporations invest heavily in environmental campaigns to improve their public image."
+      },
+      // POSITIVE ADJECTIVES
+      {
+        id: "rep-11",
+        word: "reputable (adj.)",
+        definition: "Having a good reputation; reliable.",
+        example: "Consumers should only purchase medicine from reputable pharmacies."
+      },
+      {
+        id: "rep-12",
+        word: "respected (adj.)",
+        definition: "Admired by others because of qualities or achievements.",
+        example: "He is a widely respected economist whose advice is sought by policymakers."
+      },
+      {
+        id: "rep-13",
+        word: "esteemed (adj.)",
+        definition: "Highly respected and admired (formal).",
+        example: "The conference featured keynote speeches from several esteemed researchers."
+      },
+      {
+        id: "rep-14",
+        word: "renowned (adj.)",
+        definition: "Famous for quality or achievement.",
+        example: "The region is renowned for its traditional craftsmanship and hospitality."
+      },
+      {
+        id: "rep-15",
+        word: "well-regarded (adj.)",
+        definition: "Generally approved of and respected.",
+        example: "She attended a well-regarded technical institute before starting her own software firm."
+      },
+      {
+        id: "rep-16",
+        word: "trustworthy (adj.)",
+        definition: "Able to be relied on as honest or truthful.",
+        example: "In an era of misinformation, finding trustworthy news sources is essential."
+      },
+      {
+        id: "rep-17",
+        word: "prestigious (adj.)",
+        definition: "Having high status and inspiring respect.",
+        example: "Winning such a prestigious literary prize transformed the young author's career."
+      },
+      // NEGATIVE ADJECTIVES
+      {
+        id: "rep-18",
+        word: "notorious (adj.)",
+        definition: "Famous for something bad.",
+        example: "That intersection is notorious for severe traffic congestion during rush hour."
+      },
+      {
+        id: "rep-19",
+        word: "disreputable (adj.)",
+        definition: "Having a bad reputation; not trustworthy.",
+        example: "Tourists are warned to avoid disreputable agencies that charge hidden fees."
+      },
+      {
+        id: "rep-20",
+        word: "infamous (adj.)",
+        definition: "Well known for bad reasons.",
+        example: "The city's old prison is infamous for the harsh conditions prisoners once endured."
+      },
+      {
+        id: "rep-21",
+        word: "tarnished (adj.)",
+        definition: "Damaged, spoiled, or no longer perfect.",
+        example: "Following the accounting scandal, the firm was left with a severely tarnished reputation."
+      },
+      {
+        id: "rep-22",
+        word: "dubious (adj.)",
+        definition: "Not to be trusted; morally questionable.",
+        example: "The advertisement made dubious claims about curing illnesses overnight."
+      },
+      {
+        id: "rep-23",
+        word: "discredited (adj.)",
+        definition: "No longer believed or respected.",
+        example: "The study was quickly discredited after independent scientists exposed flawed data."
+      },
+      {
+        id: "rep-24",
+        word: "questionable (adj.)",
+        definition: "Open to doubt; likely to be dishonest or unfair.",
+        example: "The charity faced criticism over its questionable use of donated funds."
+      }
+    ]
+  },
+  {
+    deckId: "reputation-verbs-collocations",
+    title: "Reputation: Verbs & Collocations",
+    cards: [
+      {
+        id: "rc-1",
+        word: "earn / establish / build up a reputation",
+        definition: "To gradually gain recognition and respect through effort over time.",
+        example: "She built a reputation as a fair manager who always listens to her team."
+      },
+      {
+        id: "rc-2",
+        word: "gain / acquire a reputation",
+        definition: "To come to be known for a particular quality or behavior.",
+        example: "The clinic quickly gained a reputation for providing affordable, high-quality care."
+      },
+      {
+        id: "rc-3",
+        word: "maintain / uphold a reputation",
+        definition: "To keep a good reputation at the same high level.",
+        example: "Strict quality control helps the manufacturer uphold its reputation for reliability."
+      },
+      {
+        id: "rc-4",
+        word: "safeguard / protect a reputation",
+        definition: "To defend one's good name from harm or criticism.",
+        example: "Public figures often hire communications teams to safeguard their reputation."
+      },
+      {
+        id: "rc-5",
+        word: "enhance / boost a reputation",
+        definition: "To improve or increase respect and admiration.",
+        example: "Hosting international sporting events can boost a city's global reputation."
+      },
+      {
+        id: "rc-6",
+        word: "tarnish / damage / undermine a reputation",
+        definition: "To weaken or harm the respect people have for someone or something.",
+        example: "One careless mistake on social media can tarnish a professional reputation."
+      },
+      {
+        id: "rc-7",
+        word: "ruin / destroy a reputation",
+        definition: "To completely wreck someone's good standing.",
+        example: "False accusations can ruin an innocent person's reputation before the truth emerges."
+      },
+      {
+        id: "rc-8",
+        word: "restore / rebuild / repair a reputation",
+        definition: "To bring back trust and respect after a mistake or scandal.",
+        example: "It took the airline several years of improved safety standards to restore its reputation."
+      },
+      {
+        id: "rc-9",
+        word: "salvage / regain a reputation",
+        definition: "To rescue or win back lost respect.",
+        example: "By issuing an immediate apology and refunding customers, the company managed to salvage its reputation."
+      },
+      {
+        id: "rc-10",
+        word: "a good / solid / excellent reputation",
+        definition: "Collocations describing a strong, dependable positive reputation.",
+        example: "The hotel has an excellent reputation for service."
+      },
+      {
+        id: "rc-11",
+        word: "a spotless / unblemished reputation",
+        definition: "A completely clean reputation with no mistakes or scandals.",
+        example: "He kept a spotless reputation throughout his forty-year career in public service."
+      },
+      {
+        id: "rc-12",
+        word: "a poor / bad / dubious reputation",
+        definition: "Collocations describing an unfavorable or untrustworthy reputation.",
+        example: "The area has a poor reputation for safety at night."
+      },
+      {
+        id: "rc-13",
+        word: "enjoy / have a reputation for (+ noun / -ing)",
+        definition: "To be widely known and appreciated for a positive trait.",
+        example: "The city enjoys a reputation for tolerance and cultural diversity."
+      },
+      {
+        id: "rc-14",
+        word: "live up to one's reputation",
+        definition: "To be as good as people say or expect you to be.",
+        example: "The restaurant certainly lives up to its reputation for serving the freshest seafood in town."
+      },
+      {
+        id: "rc-15",
+        word: "an international / global reputation",
+        definition: "Recognition and respect extending around the world.",
+        example: "The university has a global reputation for pioneering medical research."
+      }
+    ]
+  },
+  {
+    deckId: "reputation-expressions-families",
+    title: "Reputation: Expressions & Word Families",
+    cards: [
+      {
+        id: "re-1",
+        word: "clear your name",
+        definition: "Prove that you are innocent of something you were accused of.",
+        example: "He spent years gathering evidence to clear his name after being wrongly accused."
+      },
+      {
+        id: "re-2",
+        word: "your name is mud",
+        definition: "People have a very bad opinion of you because of something you did.",
+        example: "After he broke his promise to the community, his name was mud in the neighborhood."
+      },
+      {
+        id: "re-3",
+        word: "drag someone's name through the mud",
+        definition: "Say bad things in public to damage someone's reputation.",
+        example: "Tabloid newspapers are often criticized for dragging celebrities' names through the mud."
+      },
+      {
+        id: "re-4",
+        word: "lose face / save face",
+        definition: "Lose other people's respect, or act to protect your dignity and respect.",
+        example: "In many cultures, admitting a public mistake causes a leader to lose face."
+      },
+      {
+        id: "re-5",
+        word: "a blot on your record",
+        definition: "A mistake or bad event that spoils an otherwise good history.",
+        example: "Aside from one minor fine, she has never had a blot on her professional record."
+      },
+      {
+        id: "re-6",
+        word: "word of mouth",
+        definition: "Opinions and recommendations spread informally by people talking to each other.",
+        example: "Many small local businesses rely primarily on word of mouth rather than paid advertising."
+      },
+      {
+        id: "re-7",
+        word: "make a name for yourself",
+        definition: "Become well known and respected for your achievements.",
+        example: "She first made a name for herself as an investigative reporter before writing books."
+      },
+      {
+        id: "re-8",
+        word: "a clean slate",
+        definition: "A fresh start, with past mistakes forgotten or forgiven.",
+        example: "Moving to a new school gave him a clean slate to focus on his studies."
+      },
+      {
+        id: "re-9",
+        word: "word family: reputation / reputable / disreputable",
+        definition: "Noun: reputation | Adj: reputable | Opposite: disreputable.",
+        example: "Choosing a reputable contractor protects homeowners from disreputable builders."
+      },
+      {
+        id: "re-10",
+        word: "word family: trust / trustworthy / untrustworthy",
+        definition: "Noun & Verb: trust | Adj: trustworthy | Opposite: untrustworthy.",
+        example: "It is difficult to trust someone who has repeatedly proven to be untrustworthy."
+      },
+      {
+        id: "re-11",
+        word: "word family: credibility / credible / discredit",
+        definition: "Noun: credibility | Adj: credible | Verb: discredit | Opposite: not credible.",
+        example: "Opponents tried to discredit the witness, yet the jury still found her testimony credible."
+      },
+      {
+        id: "re-12",
+        word: "word family: respect / respected / disrespectful",
+        definition: "Noun & Verb: respect | Adj: respected | Opposite: disrespectful.",
+        example: "Students are expected to show respect and never be disrespectful toward guest speakers."
+      },
+      {
+        id: "re-13",
+        word: "word family: honesty / honest / dishonest",
+        definition: "Noun: honesty | Adj: honest | Opposite: dishonest.",
+        example: "Academic honesty is fundamental, and any dishonest behavior results in automatic failure."
       }
     ]
   }
