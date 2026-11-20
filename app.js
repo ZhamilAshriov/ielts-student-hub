@@ -1870,9 +1870,15 @@ function updateDashboardUI() {
     ...cachedTeacherHw.map(t => ({ id: t.id, title: t.title, skill: t.skill, dueDate: t.dueDate, week: t.week || fallbackWeek, isDynamic: true, details: t.details, status: t.status }))
   ];
 
-  const pendingHw = allAssignments.filter((a) => !studentSubmissionsMap[a.id]).length;
+  const nowMs = Date.now();
+  const oneDayMs = 24 * 60 * 60 * 1000;
+  const pendingHw = allAssignments.filter((a) => {
+    const isSub = studentSubmissionsMap[a.id] || a.status === "submitted" || a.status === "verified";
+    if (isSub) return false;
+    const isLockedOut = a.dueDate && nowMs > (new Date(a.dueDate).getTime() + oneDayMs);
+    return !isLockedOut;
+  }).length;
   const pendingPuns = cachedStudentPunishments.filter((t) => t.status !== "verified" && t.status !== "submitted").length;
-
   document.getElementById("nav-due-badge").textContent = totalDue;
   document.getElementById("nav-hw-badge").textContent = pendingHw;
   document.getElementById("nav-pun-badge").textContent = pendingPuns;
