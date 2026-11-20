@@ -1361,15 +1361,16 @@ window.transcribeAndEvaluateSpeaking = async function (docId) {
     const systemPrompt = `You are a strict, certified IELTS Speaking examiner.
 Listen carefully to the student's audio response for this prompt: "${promptContext}".
 
-Return your response in valid JSON with two string fields:
+Return your response in valid JSON with three fields:
 1. "transcript": A verbatim transcription of everything the student said, preserving filler words (um, uh, like), pauses (...), and self-corrections so the teacher can inspect fluency.
 2. "evaluation": A concise, structured IELTS Speaking assessment formatted cleanly with line breaks covering:
-   - Estimated Overall Band: (e.g., Band 6.0)
-   - Fluency & Coherence (Band X.X): 1-2 sentences on pace, hesitation, and linking.
-   - Lexical Resource (Band X.X): 1-2 sentences on vocabulary range and collocations.
-   - Grammatical Range & Accuracy (Band X.X): 1-2 sentences on sentence structures and specific errors heard.
-   - Pronunciation (Band X.X): 1-2 sentences on clarity, word stress, and intonation.
-   - Key Corrections & Upgrades: 2-3 bullet points quoting exact mistakes from the audio and giving Band 8+ alternatives.`;
+  - Estimated Overall Band: (e.g., Band 6.0)
+  - Fluency & Coherence (Band X.X): 1-2 sentences on pace, hesitation, and linking.
+  - Lexical Resource (Band X.X): 1-2 sentences on vocabulary range and collocations.
+  - Grammatical Range & Accuracy (Band X.X): 1-2 sentences on sentence structures and specific errors heard.
+  - Pronunciation (Band X.X): 1-2 sentences on clarity, word stress, and intonation.
+  - Key Corrections & Upgrades: 2-3 bullet points quoting exact mistakes from the audio and giving Band 8+ alternatives.
+3. "mistakeCounts": An object counting specific recurring error categories heard in the audio using ONLY these keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (use 0 if none).`;
 
     // 3. Call Gemini 3.8 Flash with inline audio
     const geminiRes = await fetch(
@@ -1407,14 +1408,20 @@ Return your response in valid JSON with two string fields:
     // 4. Save to Firestore so you never have to re-run it
     await updateDoc(doc(db, "submissions", docId), {
       transcript,
-      aiEvaluation
+      aiEvaluation,
+      aiMistakesLogged: true
     });
+
+    if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
+      await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
+    }
 
     // 5. Update local cache and re-render the queue
     const subIdx = cachedSubmissions.findIndex((s) => s.docId === docId);
     if (subIdx !== -1) {
       cachedSubmissions[subIdx].transcript = transcript;
       cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      cachedSubmissions[subIdx].aiMistakesLogged = true;
     }
 
     renderTeacherGradingQueue(cachedStudents, cachedSubmissions);
