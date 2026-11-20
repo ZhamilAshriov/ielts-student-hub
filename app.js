@@ -1880,33 +1880,43 @@ async function gradeCurrentCard(quality) {
     ankiProgressMap[card.id] = { studentId: currentStudentId, cardId: card.id, ...updated };
 
     await setDoc(doc(db, "ankiProgress", `${currentStudentId}_${card.id}`), ankiProgressMap[card.id]);
-
-    const today = getTodayStr();
-    const yesterday = getTodayStr(-1);
-    const stats = currentStudentProfile.ankiStats || { streak: 0, lastReviewedDate: null, todayCount: 0, totalReviewed: 0 };
-
-    let newStreak = stats.streak || 0;
-    let newTodayCount = 1;
-
-    if (stats.lastReviewedDate === today) {
-      newTodayCount = (stats.todayCount || 0) + 1;
-      if (newStreak === 0) newStreak = 1;
-    } else if (stats.lastReviewedDate === yesterday) {
-      newStreak += 1;
-    } else {
-      newStreak = 1;
-    }
-
-    const updatedStats = {
-      streak: newStreak,
-      lastReviewedDate: today,
-      todayCount: newTodayCount,
-      totalReviewed: (stats.totalReviewed || 0) + 1
-    };
-    currentStudentProfile.ankiStats = updatedStats;
-
-    await updateDoc(doc(db, "users", currentStudentId), { ankiStats: updatedStats });
   }
+
+  // Always update daily streak & review counts (including Bonus Practice Mode when 0 cards are due)
+  const today = getTodayStr();
+  const yesterday = getTodayStr(-1);
+  const stats = currentStudentProfile.ankiStats || { streak: 0, lastReviewedDate: null, todayCount: 0, totalReviewed: 0 };
+
+  let newStreak = stats.streak || 0;
+  let newTodayCount = 1;
+
+  if (stats.lastReviewedDate === today) {
+    newTodayCount = (stats.todayCount || 0) + 1;
+    if (newStreak === 0) newStreak = 1;
+  } else if (stats.lastReviewedDate === yesterday) {
+    newStreak += 1;
+  } else {
+    newStreak = 1;
+  }
+
+  const updatedStats = {
+    streak: newStreak,
+    lastReviewedDate: today,
+    todayCount: newTodayCount,
+    totalReviewed: (stats.totalReviewed || 0) + 1
+  };
+  currentStudentProfile.ankiStats = updatedStats;
+
+  await setDoc(
+    doc(db, "users", currentStudentId),
+    {
+      studentId: currentStudentId,
+      fullName: currentStudentProfile.fullName || currentStudentId,
+      role: "student",
+      ankiStats: updatedStats
+    },
+    { merge: true }
+  );
 
   populateAnkiDeckDropdown();
   updateDashboardUI();
