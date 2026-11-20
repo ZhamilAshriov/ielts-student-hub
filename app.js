@@ -1316,9 +1316,9 @@ Return your response in valid JSON with two string fields:
    - Pronunciation (Band X.X): 1-2 sentences on clarity, word stress, and intonation.
    - Key Corrections & Upgrades: 2-3 bullet points quoting exact mistakes from the audio and giving Band 8+ alternatives.`;
 
-    // 3. Call Gemini 2.5 Flash with inline audio
+    // 3. Call Gemini 3.8 Flash with inline audio
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1448,7 +1448,7 @@ Return valid JSON with three fields:
 3. "mistakeCounts": An object counting specific recurring error categories found in the essay using ONLY these keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (use 0 if none).`;
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
