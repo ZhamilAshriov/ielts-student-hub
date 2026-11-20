@@ -150,7 +150,7 @@ function getAnnouncementBadgeClass(tag) {
   return "badge-gray";
 }
 
-const ANNOUNCEMENT_EMOJIS = ["👍", "❤️", "🔥", "🎉", "👏"];
+const ANNOUNCEMENT_EMOJIS = ["👍", "❤️", "🔥", "🎉", "👏", "😢", "😡"];
 
 function buildAnnouncementReactionsHtml(ann, actorId, isTeacher = false) {
   const reactions = ann.reactions || {};
