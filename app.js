@@ -20,7 +20,9 @@ import {
   getDocs,
   query,
   where,
-  serverTimestamp
+  serverTimestamp,
+  arrayUnion,
+  arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
@@ -147,6 +149,58 @@ function getAnnouncementBadgeClass(tag) {
   if (tag === "NEW MATERIAL") return "badge-green";
   return "badge-gray";
 }
+
+const ANNOUNCEMENT_EMOJIS = ["👍", "❤️", "🔥", "🎉", "👏"];
+
+function buildAnnouncementReactionsHtml(ann, actorId, isTeacher = false) {
+  const reactions = ann.reactions || {};
+  const pills = ANNOUNCEMENT_EMOJIS.map((emoji) => {
+    const users = Array.isArray(reactions[emoji]) ? reactions[emoji] : [];
+    const count = users.length;
+    const reacted = users.includes(actorId);
+    const activeStyle = reacted
+      ? "background:#eff6ff;border-color:#93c5fd;color:var(--primary);font-weight:700;"
+      : "background:#f8fafc;border-color:var(--border);color:var(--text);";
+    const titleAttr = isTeacher && count > 0 ? `title="Reacted by: ${escapeHtml(users.join(", "))}"` : "";
+
+    return `
+      <button type="button" ${titleAttr}
+        onclick="window.toggleAnnouncementReaction('${ann.docId}', '${emoji}')"
+        style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border:1px solid;border-radius:999px;font-size:13px;cursor:pointer;transition:all 0.15s;${activeStyle}">
+        <span>${emoji}</span>
+        ${count > 0 ? `<span style="font-size:12px;">${count}</span>` : ""}
+      </button>
+    `;
+  }).join("");
+
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:8px;border-top:1px dashed var(--border);">${pills}</div>`;
+}
+
+window.toggleAnnouncementReaction = async function (docId, emoji) {
+  const actorId = currentStudentId || "TEACHER";
+  const ann = cachedAnnouncements.find((a) => a.docId === docId);
+  if (!ann) return;
+
+  if (!ann.reactions) ann.reactions = {};
+  const currentUsers = Array.isArray(ann.reactions[emoji]) ? [...ann.reactions[emoji]] : [];
+  const hasReacted = currentUsers.includes(actorId);
+
+  // Optimistic instant UI update in memory
+  ann.reactions[emoji] = hasReacted
+    ? currentUsers.filter((id) => id !== actorId)
+    : [...currentUsers, actorId];
+
+  if (currentStudentId) renderStudentAnnouncements(cachedAnnouncements);
+  else renderTeacherAnnouncementsList(cachedAnnouncements);
+
+  try {
+    await updateDoc(doc(db, "announcements", docId), {
+      [`reactions.${emoji}`]: hasReacted ? arrayRemove(actorId) : arrayUnion(actorId)
+    });
+  } catch (err) {
+    console.error("Reaction update error:", err);
+  }
+};
 
 const MISTAKE_LABELS = {
   MCQ: "Reading: Multiple Choice", TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given",
@@ -807,6 +861,7 @@ function renderTeacherAnnouncementsList(list) {
         <button class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" onclick="window.deleteAnnouncement('${ann.docId}')">Delete</button>
       </div>
       <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);">${escapeHtml(ann.body)}</p>
+      ${buildAnnouncementReactionsHtml(ann, "TEACHER", true)}
     </div>
   `).join("");
 }
@@ -1656,6 +1711,7 @@ function renderStudentAnnouncements(list) {
         <span class="muted" style="font-size:12px;margin-left:auto;margin-bottom:0;">${formatAnnouncementDate(ann)}</span>
       </div>
       <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</p>
+      ${buildAnnouncementReactionsHtml(ann, currentStudentId, false)}
     </div>
   `).join("");
 }
