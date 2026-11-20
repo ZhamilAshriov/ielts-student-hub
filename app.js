@@ -3105,24 +3105,41 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
 
   const events = [];
   mocks.forEach((m) => {
-    events.push({ sortKey: m.date || "2026-01-01", label: m.mockTitle || "Mock Exam", listening: m.listening, reading: m.reading, writing: m.writing, speaking: m.speaking, overall: m.overall });
+    const shortMock = (m.mockTitle || "Mock").replace(/\s*20\d{2}\s*/g, " ").replace(/Mock Exam/i, "Mock").trim();
+    events.push({
+      sortKey: m.date || "2026-01-01",
+      label: shortMock,
+      listening: m.listening,
+      reading: m.reading,
+      writing: m.writing,
+      speaking: m.speaking,
+      overall: m.overall
+    });
   });
 
-  submissions.forEach((sub) => {
+  const skillCounters = { listening: 0, reading: 0, writing: 0, speaking: 0 };
+  const sortedSubs = [...submissions].sort((a, b) => {
+    const tA = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : 0;
+    const tB = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : 0;
+    return tA - tB;
+  });
+
+  sortedSubs.forEach((sub) => {
     const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId)
       || cachedTeacherHw.find((a) => a.id === sub.assignmentId)
       || cachedTeacherPunishments.find((p) => p.id === sub.assignmentId);
     if (!sub.bandScore || sub.isDrill || (hw && hw.isDrill)) return;
     if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) % 40 !== 0) return;
 
+    skillCounters[sub.skill] = (skillCounters[sub.skill] || 0) + 1;
     const dateObj = sub.submittedAt?.toDate ? sub.submittedAt.toDate() : (hw?.dueDate ? new Date(hw.dueDate) : new Date("2026-11-15"));
     const dateStr = dateObj.toISOString().split("T")[0];
     const shortDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const cleanTitle = hw ? (hw.title || hw.reason) : `${sub.skill.toUpperCase()} Test`;
+    const capSkill = sub.skill.charAt(0).toUpperCase() + sub.skill.slice(1);
 
     events.push({
       sortKey: dateStr,
-      label: `${cleanTitle} (${shortDate})`,
+      label: `${capSkill} #${skillCounters[sub.skill]} (${shortDate})`,
       listening: sub.skill === "listening" ? sub.bandScore : null,
       reading: sub.skill === "reading" ? sub.bandScore : null,
       writing: sub.skill === "writing" ? sub.bandScore : null,
@@ -3147,8 +3164,20 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
       ]
     },
     options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: { y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } } },
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          ticks: {
+            maxRotation: 0,
+            minRotation: 0,
+            autoSkip: true,
+            font: { size: 11 }
+          },
+          grid: { display: false }
+        },
+        y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } }
+      },
       plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } }
     }
   });
