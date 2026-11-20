@@ -3109,15 +3109,25 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   });
 
   submissions.forEach((sub) => {
-    const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId) || cachedTeacherHw.find(a => a.id === sub.assignmentId);
+    const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId)
+      || cachedTeacherHw.find((a) => a.id === sub.assignmentId)
+      || cachedTeacherPunishments.find((p) => p.id === sub.assignmentId);
     if (!sub.bandScore || sub.isDrill || (hw && hw.isDrill)) return;
-    if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) !== 40) return;
+    if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) % 40 !== 0) return;
 
-    const dateStr = sub.submittedAt?.toDate ? sub.submittedAt.toDate().toISOString().split("T")[0] : (hw ? hw.dueDate.split("T")[0] : "2026-11-15");
+    const dateObj = sub.submittedAt?.toDate ? sub.submittedAt.toDate() : (hw?.dueDate ? new Date(hw.dueDate) : new Date("2026-11-15"));
+    const dateStr = dateObj.toISOString().split("T")[0];
+    const shortDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const cleanTitle = hw ? (hw.title || hw.reason) : `${sub.skill.toUpperCase()} Test`;
+
     events.push({
-      sortKey: dateStr, label: `${sub.assignmentId} (${sub.skill.toUpperCase()})`,
-      listening: sub.skill === "listening" ? sub.bandScore : null, reading: sub.skill === "reading" ? sub.bandScore : null,
-      writing: sub.skill === "writing" ? sub.bandScore : null, speaking: sub.skill === "speaking" ? sub.bandScore : null, overall: null
+      sortKey: dateStr,
+      label: `${cleanTitle} (${shortDate})`,
+      listening: sub.skill === "listening" ? sub.bandScore : null,
+      reading: sub.skill === "reading" ? sub.bandScore : null,
+      writing: sub.skill === "writing" ? sub.bandScore : null,
+      speaking: sub.skill === "speaking" ? sub.bandScore : null,
+      overall: null
     });
   });
 
