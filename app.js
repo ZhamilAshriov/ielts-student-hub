@@ -1690,6 +1690,7 @@ async function initStudentData() {
   buildAnkiQueue();
   updateDashboardUI();
   renderStudentAnnouncements(cachedAnnouncements);
+  checkAndShowNewAnnouncementModal(cachedAnnouncements);
   renderAssignmentsList();
   renderStudentPunishmentsList();
   renderResourcesList("all");
@@ -1714,6 +1715,77 @@ function renderStudentAnnouncements(list) {
       ${buildAnnouncementReactionsHtml(ann, currentStudentId, false)}
     </div>
   `).join("");
+}
+
+function checkAndShowNewAnnouncementModal(list) {
+  if (!currentStudentId || !Array.isArray(list) || list.length === 0) return;
+
+  const storageKey = `ielts_hub_seen_anns_${currentStudentId}`;
+  let seenIds = [];
+  try {
+    seenIds = JSON.parse(localStorage.getItem(storageKey) || "[]");
+  } catch {
+    seenIds = [];
+  }
+
+  const seenSet = new Set(seenIds);
+  const unseenAnns = list.filter((ann) => !seenSet.has(ann.docId));
+  if (unseenAnns.length === 0) return;
+
+  // Remove any existing modal before creating a new one
+  document.getElementById("new-ann-popup-overlay")?.remove();
+
+  const overlay = document.createElement("div");
+  overlay.id = "new-ann-popup-overlay";
+  overlay.style.cssText = `
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.55);
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; z-index: 9999; backdrop-filter: blur(2px);
+  `;
+
+  const cardsHtml = unseenAnns.map((ann) => `
+    <div style="background:#f8fafc;border:1px solid var(--border);${ann.pinned ? "border-left:4px solid var(--primary);" : ""}border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
+        <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
+        <span class="muted" style="font-size:12px;margin-left:auto;">${formatAnnouncementDate(ann)}</span>
+      </div>
+      <div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:6px;">${escapeHtml(ann.title)}</div>
+      <div style="font-size:14px;white-space:pre-line;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</div>
+    </div>
+  `).join("");
+
+  overlay.innerHTML = `
+    <div style="background:#ffffff;border-radius:14px;max-width:520px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 25px -5px rgba(0,0,0,0.18);overflow:hidden;">
+      <div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:20px;">📢</span>
+          <h3 style="margin:0;font-size:17px;">New Announcement${unseenAnns.length > 1 ? `s (${unseenAnns.length})` : ""}</h3>
+        </div>
+        <button type="button" id="close-ann-popup-x" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1;">✕</button>
+      </div>
+      <div style="padding:18px 20px;overflow-y:auto;">
+        ${cardsHtml}
+      </div>
+      <div style="padding:14px 20px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:#f8fafc;">
+        <button type="button" class="btn btn-primary" id="ack-ann-popup-btn">Got it ✓</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  const dismissModal = () => {
+    const updatedSeen = Array.from(new Set([...seenIds, ...list.map((a) => a.docId)]));
+    localStorage.setItem(storageKey, JSON.stringify(updatedSeen));
+    overlay.remove();
+  };
+
+  document.getElementById("ack-ann-popup-btn")?.addEventListener("click", dismissModal);
+  document.getElementById("close-ann-popup-x")?.addEventListener("click", dismissModal);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) dismissModal();
+  });
 }
 
 function getFilteredVocabCards() {
