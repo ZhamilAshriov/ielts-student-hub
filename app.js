@@ -1,6 +1,4 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import {
-  getAuth,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
@@ -8,9 +6,6 @@ import {
   updatePassword
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  initializeFirestore,
-  persistentLocalCache,
-  persistentMultipleTabManager,
   doc,
   setDoc,
   getDoc,
@@ -24,71 +19,26 @@ import {
   arrayUnion,
   arrayRemove
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+import { auth, db, secondaryAuth, LOGIN_DOMAIN } from "./firebase.js";
+import { store, clearLoginTimer, resolveUserRole } from "./store.js";
+import {
+  escapeHtml,
+  notify,
+  withLoading,
+  getTodayStr,
+  formatDueDate,
+  isPastDeadline
+} from "./utils.js";
+import {
+  uploadImagesToCloudinary,
+  uploadAudioClipsToCloudinary,
+  submitTaskSubmission,
+  revokeClipsList
+} from "./submissions.js";
 import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
 import { RESOURCES } from "./resources-data.js";
-
-if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
-}
-
-const firebaseConfig = {
-  apiKey: "AIzaSyDrGjx51H42h6Pkg44RIpZo0vyZApz8SGA",
-  authDomain: "zhamil-ielts-hub.firebaseapp.com",
-  projectId: "zhamil-ielts-hub",
-  storageBucket: "zhamil-ielts-hub.firebasestorage.app",
-  messagingSenderId: "101411624698",
-  appId: "1:101411624698:web:862eba707513e098c65b43"
-};
-
-const CLOUDINARY_CLOUD_NAME = "b9izjowd";
-const CLOUDINARY_UPLOAD_PRESET = "ielts_speaking";
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
-});
-const secondaryApp = initializeApp(firebaseConfig, `SecondaryAccountCreator_${Date.now()}`);
-const secondaryAuth = getAuth(secondaryApp);
-const DOMAIN = "@zhamil-hub.local";
-const TEACHER_EMAIL = "teacher" + DOMAIN;
-
-let currentStudentId = null;
-let currentStudentProfile = null;
-let ankiProgressMap = {};
-let ankiQueue = [];
-let currentCard = null;
-let isCardFlipped = false;
-let bonusMode = false;
-let selectedDeckId = "all";
-let studentSubmissionsMap = {};
-let studentMocksList = [];
-let allGroupUsers = [];
-let allGroupMocks = [];
-let cachedAnnouncements = [];
-let cachedStudentPunishments = [];
-
-
-let studentChartInstance = null;
-let groupCompareChartInstance = null;
-let inspectorChartInstance = null;
-
-let cachedStudents = [];
-let cachedSubmissions = [];
-let cachedMocks = [];
-let cachedTeacherHw = [];
-let cachedTeacherPunishments = [];
-
-let mediaRecorder = null;
-let recordedChunks = [];
-let recordedAudioList = []; // Array of { blob, url, duration }
-let recReplaceLast = false;
-let recInterval = null;
-let recSeconds = 0;
-
-let activeDynamicTask = null;
-let activeDynamicCollection = null;
 
 function rawToIeltsBand(raw, total = 40) {
   const scaled = Math.round((raw / total) * 40);
@@ -108,20 +58,6 @@ function rawToIeltsBand(raw, total = 40) {
 function calcOverallIelts(l, r, w, s) {
   const avg = (Number(l) + Number(r) + Number(w) + Number(s)) / 4;
   return Math.round(avg * 2) / 2;
-}
-
-function getTodayStr(offsetDays = 0) {
-  const d = new Date();
-  d.setDate(d.getDate() + offsetDays);
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function formatDueDate(isoStr) {
-  const d = new Date(isoStr);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
 function formatLoginEmail(rawId) {
@@ -2252,23 +2188,6 @@ window.startPunishmentRunner = async function (taskId) {
   document.getElementById("pun-runner-right").innerHTML = getDynamicRunnerHTML(activeDynamicTask, "punishment");
 };
 
-async function uploadMultipleFiles(fileInputId) {
-  const files = document.getElementById(fileInputId)?.files;
-  if (!files || files.length === 0) return null;
-  if (files.length > 8) {
-    alert("You can upload a maximum of 8 images per submission.");
-    return null;
-  }
-  const urls = [];
-  for (let i = 0; i < files.length; i++) {
-    const formData = new FormData(); formData.append("file", files[i]); formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    if (data.secure_url) urls.push(data.secure_url);
-  }
-  return urls.length > 0 ? urls : null;
-}
-
 window.submitDynamicScreenshot = async function(totalQ) {
   const fileInput = document.getElementById("dynamic-lr-file");
   const scoreInputs = Array.from(document.querySelectorAll(".dynamic-lr-set-score"));
@@ -3044,20 +2963,6 @@ function stopActiveRecordingCleanup() {
   clearInterval(recInterval);
 }
 
-async function uploadAllRecordedAudio(prefix) {
-  const uploadedUrls = [];
-  for (let i = 0; i < recordedAudioList.length; i++) {
-    const formData = new FormData();
-    formData.append("file", recordedAudioList[i].blob, `${prefix}_part${i + 1}_${currentStudentId}.webm`);
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`, { method: "POST", body: formData });
-    const data = await res.json();
-    if (!data.secure_url) throw new Error(data.error?.message || `Audio #${i + 1} upload failed`);
-    uploadedUrls.push(data.secure_url);
-  }
-  return uploadedUrls;
-}
-
 window.submitSpeakingHomework = async function (assignmentId) {
   if (recordedAudioList.length === 0) return alert("Please record your speaking answer first.");
   const btn = document.getElementById("submit-speaking-btn") || document.getElementById("pun-submit-speaking-btn");
@@ -3424,8 +3329,4 @@ function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(
       </div>
     `;
   }).join("");
-}
-
-function escapeHtml(str) {
-  return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
