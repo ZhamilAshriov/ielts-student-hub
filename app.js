@@ -1209,16 +1209,32 @@ function renderTeacherGradingQueue(students, submissions) {
       `;
     }
 
+    const hasMultiSet = Array.isArray(sub.setScores) && sub.setScores.length > 1;
     const computedBand = sub.bandScore != null
       ? Number(sub.bandScore).toFixed(1)
       : ((sub.skill === "reading" || sub.skill === "listening") && sub.rawScore != null && sub.totalQuestions)
         ? rawToIeltsBand(sub.rawScore, sub.totalQuestions).toFixed(1)
         : "6.0";
 
-    const bandSelectorHtml = noBandRequired
-      ? `<div><label>Status</label><input type="text" value="Completion Check" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${sub.docId}" value="" /></div>`
-      : `<div><label>Confirm / Set Band</label><select id="band-${sub.docId}">${["4.0","4.5","5.0","5.5","6.0","6.5","7.0","7.5","8.0","8.5","9.0"].map((b) => `<option value="${b}" ${computedBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select></div>`;
-
+    const bandOptions = ["4.0","4.5","5.0","5.5","6.0","6.5","7.0","7.5","8.0","8.5","9.0"];
+    let bandSelectorHtml = "";
+    if (noBandRequired) {
+      bandSelectorHtml = `<div><label>Status</label><input type="text" value="Completion Check" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${sub.docId}" value="" /></div>`;
+    } else if (hasMultiSet) {
+      const multiDropdowns = sub.setScores.map((sc, i) => {
+        const defaultSetBand = (Array.isArray(sub.setBands) && sub.setBands[i] != null)
+          ? Number(sub.setBands[i]).toFixed(1)
+          : rawToIeltsBand(sc, 40).toFixed(1);
+        return `
+          <div style="min-width:110px;">
+            <label>Test ${i + 1} Band</label>
+            <select class="set-band-select-${sub.docId}">${bandOptions.map((b) => `<option value="${b}" ${defaultSetBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select>
+          </div>`;
+      }).join("");
+      bandSelectorHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;">${multiDropdowns}<input type="hidden" id="band-${sub.docId}" value="${computedBand}" /></div>`;
+    } else {
+      bandSelectorHtml = `<div><label>Confirm / Set Band</label><select id="band-${sub.docId}">${bandOptions.map((b) => `<option value="${b}" ${computedBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select></div>`;
+    }
     return `
       <div class="grade-card">
         <div class="card-header-flex" style="margin-bottom:6px;">
@@ -1241,10 +1257,21 @@ function renderTeacherGradingQueue(students, submissions) {
 }
 
 window.saveTeacherGrade = async function (docId, assignmentId, noBandRequired = false) {
+  const setSelects = Array.from(document.querySelectorAll(`.set-band-select-${docId}`));
   const rawBand = document.getElementById(`band-${docId}`).value;
   const fbVal = document.getElementById(`fb-${docId}`).value.trim();
   const updatePayload = { teacherFeedback: fbVal, status: "graded", gradedAt: serverTimestamp() };
-  if (!noBandRequired && rawBand) updatePayload.bandScore = Number(rawBand);
+
+  if (!noBandRequired) {
+    if (setSelects.length > 0) {
+      const setBands = setSelects.map((sel) => Number(sel.value));
+      const avg = setBands.reduce((sum, b) => sum + b, 0) / setBands.length;
+      updatePayload.setBands = setBands;
+      updatePayload.bandScore = Math.round(avg * 2) / 2;
+    } else if (rawBand) {
+      updatePayload.bandScore = Number(rawBand);
+    }
+  }
   await updateDoc(doc(db, "submissions", docId), updatePayload);
   
   if (assignmentId && assignmentId.startsWith("PUN_")) {
@@ -3272,20 +3299,28 @@ function buildScoreChart(canvasId, submissions, mocks, existingChart) {
     if (!sub.bandScore || sub.isDrill || (hw && hw.isDrill)) return;
     if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) % 40 !== 0) return;
 
-    skillCounters[sub.skill] = (skillCounters[sub.skill] || 0) + 1;
     const dateObj = sub.submittedAt?.toDate ? sub.submittedAt.toDate() : (hw?.dueDate ? new Date(hw.dueDate) : new Date("2026-11-15"));
     const dateStr = dateObj.toISOString().split("T")[0];
     const shortDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
     const capSkill = sub.skill.charAt(0).toUpperCase() + sub.skill.slice(1);
 
-    events.push({
-      sortKey: dateStr,
-      label: `${capSkill} #${skillCounters[sub.skill]} (${shortDate})`,
-      listening: sub.skill === "listening" ? sub.bandScore : null,
-      reading: sub.skill === "reading" ? sub.bandScore : null,
-      writing: sub.skill === "writing" ? sub.bandScore : null,
-      speaking: sub.skill === "speaking" ? sub.bandScore : null,
-      overall: null
+    const bandsToPlot = (Array.isArray(sub.setBands) && sub.setBands.length > 0)
+      ? sub.setBands
+      : (Array.isArray(sub.setScores) && sub.setScores.length > 0)
+        ? sub.setScores.map((sc) => rawToIeltsBand(sc, 40))
+        : [sub.bandScore];
+
+    bandsToPlot.forEach((bandVal) => {
+      skillCounters[sub.skill] = (skillCounters[sub.skill] || 0) + 1;
+      events.push({
+        sortKey: dateStr,
+        label: `${capSkill} #${skillCounters[sub.skill]} (${shortDate})`,
+        listening: sub.skill === "listening" ? bandVal : null,
+        reading: sub.skill === "reading" ? bandVal : null,
+        writing: sub.skill === "writing" ? bandVal : null,
+        speaking: sub.skill === "speaking" ? bandVal : null,
+        overall: null
+      });
     });
   });
 
