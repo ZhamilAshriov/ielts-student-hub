@@ -39,26 +39,31 @@ import {
 import { VOCAB_DECKS } from "./vocab-data.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
 import { RESOURCES } from "./resources-data.js";
-
-function rawToIeltsBand(raw, total = 40) {
-  const scaled = Math.round((raw / total) * 40);
-  if (scaled >= 39) return 9.0;
-  if (scaled >= 37) return 8.5;
-  if (scaled >= 35) return 8.0;
-  if (scaled >= 33) return 7.5;
-  if (scaled >= 30) return 7.0;
-  if (scaled >= 27) return 6.5;
-  if (scaled >= 23) return 6.0;
-  if (scaled >= 19) return 5.5;
-  if (scaled >= 15) return 5.0;
-  if (scaled >= 13) return 4.5;
-  return 4.0;
-}
-
-function calcOverallIelts(l, r, w, s) {
-  const avg = (Number(l) + Number(r) + Number(w) + Number(s)) / 4;
-  return Math.round(avg * 2) / 2;
-}
+import {
+  initAnkiEngine,
+  resetAnkiSession,
+  getAllDueCountAcrossAllDecks,
+  populateAnkiDeckDropdown,
+  buildAnkiQueue,
+  calcSM2
+} from "./anki.js";
+import {
+  getRecordedClips,
+  resetRecordedClips,
+  stopActiveRecordingCleanup,
+  renderRecordedClipsList,
+  removeRecordedClip,
+  startBrowserRecording,
+  stopBrowserRecording
+} from "./recorder.js";
+import {
+  MISTAKE_LABELS,
+  rawToIeltsBand,
+  calcOverallIelts,
+  buildScoreChart,
+  buildGroupCompareChart,
+  renderMistakeBars
+} from "./charts.js";
 
 function formatLoginEmail(rawId) {
   const clean = rawId.trim().toLowerCase();
@@ -136,21 +141,6 @@ window.toggleAnnouncementReaction = async function (docId, emoji) {
   } catch (err) {
     console.error("Reaction update error:", err);
   }
-};
-
-const MISTAKE_LABELS = {
-  MCQ: "Reading: Multiple Choice", TFNG: "True / False / Not Given", YNNG: "Yes / No / Not Given",
-  MATCHING_HEADINGS: "Matching Headings", MATCHING_INFO: "Matching Information", MATCHING_FEATURES: "Matching Features",
-  MATCHING_SENTENCE_ENDINGS: "Matching Sentence Endings", SENTENCE_COMPLETION: "Reading: Sentence Completion",
-  SUMMARY_COMPLETION: "Summary Completion", NOTE_COMPLETION: "Note Completion", TABLE_COMPLETION: "Table Completion",
-  FLOW_CHART_COMPLETION: "Flow-chart Completion", DIAGRAM_LABELLING: "Diagram Labelling", SHORT_ANSWER: "Reading: Short-Answer Questions",
-  L_MCQ: "Listening: Multiple Choice", MATCHING: "Listening: Matching", MAP_DIAGRAM: "Listening: Plan, Map, or Diagram", 
-  FORM_NOTE_TABLE_SUMMARY: "Listening: Form / Note / Table / Summary", L_SENTENCE_COMPLETION: "Listening: Sentence Completion", L_SHORT_ANSWER: "Listening: Short-Answer Questions",
-  W_ARTICLES: "Writing: Articles & Determiners", W_TENSE: "Writing: Verb Tense Consistency", W_SVA: "Writing: Subject-Verb Agreement",
-  W_PREPOSITIONS: "Writing: Prepositions", W_WORD_CHOICE: "Writing: Word Choice & Collocation", W_SENTENCE_STRUCTURE: "Writing: Run-ons & Fragments",
-  W_TASK_RESPONSE: "Writing: Task Response / Coherence",
-  S_FLUENCY_HESITATION: "Speaking: Hesitation & Fillers", S_GRAMMAR_TENSE: "Speaking: Grammar & Tense Control",
-  S_LEXICAL_RANGE: "Speaking: Limited Vocabulary Range", S_PRONUNCIATION: "Speaking: Pronunciation & Stress"
 };
 
 // ==========================================
@@ -1655,9 +1645,8 @@ async function initStudentData() {
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
   cachedAnnouncements = sortAnnouncementsList(rawAnns);
 
-  bonusMode = false;
-  selectedDeckId = "all";
-  buildAnkiQueue();
+  initAnkiEngine({ onDashboardSync: updateDashboardUI });
+  resetAnkiSession();
   updateDashboardUI();
   renderStudentAnnouncements(cachedAnnouncements);
   checkAndShowNewAnnouncementModal(cachedAnnouncements);
@@ -1758,68 +1747,6 @@ function checkAndShowNewAnnouncementModal(list) {
   });
 }
 
-function getFilteredVocabCards() {
-  const all = [];
-  VOCAB_DECKS.forEach((deck) => {
-    if (selectedDeckId === "all" || deck.deckId === selectedDeckId) deck.cards.forEach((c) => all.push({ ...c, deckId: deck.deckId, deckTitle: deck.title }));
-  });
-  return all;
-}
-
-function getAllDueCountAcrossAllDecks() {
-  const today = getTodayStr();
-  let totalDue = 0;
-  VOCAB_DECKS.forEach((deck) => {
-    deck.cards.forEach((card) => { if (!ankiProgressMap[card.id] || ankiProgressMap[card.id].nextReviewDate <= today) totalDue++; });
-  });
-  return totalDue;
-}
-
-function populateAnkiDeckDropdown() {
-  const sel = document.getElementById("anki-deck-select");
-  if (!sel) return;
-  const today = getTodayStr();
-  const optionsHtml = [`<option value="all" ${selectedDeckId === "all" ? "selected" : ""}>All Decks (${getAllDueCountAcrossAllDecks()} due)</option>`];
-  VOCAB_DECKS.forEach((deck) => {
-    const deckDue = deck.cards.filter((c) => !ankiProgressMap[c.id] || ankiProgressMap[c.id].nextReviewDate <= today).length;
-    optionsHtml.push(`<option value="${escapeHtml(deck.deckId)}" ${selectedDeckId === deck.deckId ? "selected" : ""}>${escapeHtml(deck.title)} (${deckDue} due)</option>`);
-  });
-  sel.innerHTML = optionsHtml.join("");
-}
-
-function speakEnglishText(rawText, isWord = true) {
-  if (!("speechSynthesis" in window) || !rawText) return;
-  window.speechSynthesis.cancel();
-  let clean = rawText;
-  if (isWord) clean = clean.replace(/\((adj|adv|n|v|phr|prep)\.\)/gi, "").replace(/\s*\/\s*/g, ", ").trim();
-  const utterance = new SpeechSynthesisUtterance(clean);
-  utterance.lang = "en-GB";
-  utterance.rate = isWord ? 0.92 : 0.96;
-  window.speechSynthesis.speak(utterance);
-}
-
-document.getElementById("anki-deck-select")?.addEventListener("change", (e) => {
-  selectedDeckId = e.target.value;
-  bonusMode = false;
-  buildAnkiQueue();
-});
-document.getElementById("speak-word-btn")?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (currentCard) speakEnglishText(currentCard.word, true);
-});
-document.getElementById("speak-example-btn")?.addEventListener("click", (e) => {
-  e.stopPropagation();
-  if (currentCard) speakEnglishText(currentCard.example, false);
-});
-
-function buildAnkiQueue() {
-  populateAnkiDeckDropdown();
-  const filteredCards = getFilteredVocabCards();
-  const today = getTodayStr();
-  ankiQueue = bonusMode ? [...filteredCards] : filteredCards.filter((card) => !ankiProgressMap[card.id] || ankiProgressMap[card.id].nextReviewDate <= today);
-  renderNextAnkiCard();
-}
-
 function updateDashboardUI() {
   const totalDue = getAllDueCountAcrossAllDecks();
   const stats = currentStudentProfile.ankiStats || {};
@@ -1863,177 +1790,6 @@ function updateDashboardUI() {
     document.getElementById("dash-latest-band").textContent = "—";
   }
 }
-// ==========================================
-// ANKI ENGINE: RENDERING & GRADING
-// ==========================================
-function renderNextAnkiCard() {
-  const stage = document.getElementById("anki-stage");
-  const doneState = document.getElementById("anki-done-state");
-  const subtitle = document.getElementById("anki-deck-subtitle");
-
-  let newCnt = 0;
-  let revCnt = 0;
-  ankiQueue.forEach((c) => (!ankiProgressMap[c.id] ? newCnt++ : revCnt++));
-  document.getElementById("anki-new-count").textContent = newCnt;
-  document.getElementById("anki-review-count").textContent = revCnt;
-
-  if (ankiQueue.length === 0) {
-    stage.classList.add("hidden");
-    doneState.classList.remove("hidden");
-    subtitle.textContent = "Daily goal complete!";
-    bonusMode = false;
-    updateDashboardUI();
-    return;
-  }
-
-  stage.classList.remove("hidden");
-  doneState.classList.add("hidden");
-  subtitle.textContent = bonusMode ? "Bonus Practice Mode" : `${ankiQueue.length} card(s) remaining in this session`;
-
-  currentCard = ankiQueue[0];
-  isCardFlipped = false;
-
-  document.getElementById("card-lesson-tag").textContent = currentCard.deckTitle;
-  document.getElementById("card-word").textContent = currentCard.word;
-  document.getElementById("card-definition").textContent = currentCard.definition;
-  document.getElementById("card-example").textContent = `"${currentCard.example}"`;
-
-  document.getElementById("card-back").classList.add("hidden");
-  document.getElementById("anki-reveal-bar").classList.remove("hidden");
-  document.getElementById("anki-rate-bar").classList.add("hidden");
-
-  const prev = ankiProgressMap[currentCard.id] || { repetitions: 0, interval: 0, easeFactor: 2.5 };
-  const goodDays = calcSM2(prev, 3).interval;
-  const easyDays = calcSM2(prev, 4).interval;
-  document.getElementById("lbl-hard").textContent = "1 day";
-  document.getElementById("lbl-good").textContent = `${goodDays} day${goodDays > 1 ? "s" : ""}`;
-  document.getElementById("lbl-easy").textContent = `${easyDays} day${easyDays > 1 ? "s" : ""}`;
-}
-
-function flipFlashcard() {
-  if (!currentCard || isCardFlipped) return;
-  isCardFlipped = true;
-  document.getElementById("card-back").classList.remove("hidden");
-  document.getElementById("anki-reveal-bar").classList.add("hidden");
-  document.getElementById("anki-rate-bar").classList.remove("hidden");
-}
-
-document.getElementById("flashcard")?.addEventListener("click", flipFlashcard);
-document.getElementById("show-answer-btn")?.addEventListener("click", flipFlashcard);
-
-document.addEventListener("keydown", (e) => {
-  const ankiSection = document.getElementById("student-anki");
-  if (ankiSection.classList.contains("hidden") || !currentCard) return;
-
-  if (e.code === "Space") {
-    e.preventDefault();
-    flipFlashcard();
-  } else if (e.key.toLowerCase() === "r") {
-    e.preventDefault();
-    speakEnglishText(currentCard.word, true);
-  } else if (isCardFlipped && ["1", "2", "3", "4"].includes(e.key)) {
-    gradeCurrentCard(Number(e.key));
-  }
-});
-
-function calcSM2(prev, quality) {
-  let repetitions = prev.repetitions || 0;
-  let interval = prev.interval || 0;
-  let easeFactor = prev.easeFactor || 2.5;
-
-  if (quality === 1) {
-    repetitions = 0;
-    interval = 0;
-  } else if (quality === 2) {
-    repetitions = Math.max(1, repetitions);
-    interval = 1;
-    easeFactor = Math.max(1.3, easeFactor - 0.15);
-  } else if (quality === 3) {
-    if (repetitions === 0) interval = 1;
-    else if (repetitions === 1) interval = 6;
-    else interval = Math.round(interval * easeFactor);
-    repetitions += 1;
-  } else if (quality === 4) {
-    if (repetitions === 0) interval = 4;
-    else if (repetitions === 1) interval = 8;
-    else interval = Math.round(interval * easeFactor * 1.3);
-    repetitions += 1;
-    easeFactor += 0.15;
-  }
-
-  return {
-    repetitions,
-    interval,
-    easeFactor: Number(easeFactor.toFixed(2)),
-    nextReviewDate: getTodayStr(interval)
-  };
-}
-
-async function gradeCurrentCard(quality) {
-  if (!currentCard) return;
-  const card = ankiQueue.shift();
-
-  if (quality === 1) {
-    const insertIdx = Math.min(2, ankiQueue.length);
-    ankiQueue.splice(insertIdx, 0, card);
-  }
-
-  if (!bonusMode) {
-    const prev = ankiProgressMap[card.id] || { repetitions: 0, interval: 0, easeFactor: 2.5 };
-    const updated = calcSM2(prev, quality);
-    ankiProgressMap[card.id] = { studentId: currentStudentId, cardId: card.id, ...updated };
-
-    await setDoc(doc(db, "ankiProgress", `${currentStudentId}_${card.id}`), ankiProgressMap[card.id]);
-  }
-
-  // Always update daily streak & review counts (including Bonus Practice Mode when 0 cards are due)
-  const today = getTodayStr();
-  const yesterday = getTodayStr(-1);
-  const stats = currentStudentProfile.ankiStats || { streak: 0, lastReviewedDate: null, todayCount: 0, totalReviewed: 0 };
-
-  let newStreak = stats.streak || 0;
-  let newTodayCount = 1;
-
-  if (stats.lastReviewedDate === today) {
-    newTodayCount = (stats.todayCount || 0) + 1;
-    if (newStreak === 0) newStreak = 1;
-  } else if (stats.lastReviewedDate === yesterday) {
-    newStreak += 1;
-  } else {
-    newStreak = 1;
-  }
-
-  const updatedStats = {
-    streak: newStreak,
-    lastReviewedDate: today,
-    todayCount: newTodayCount,
-    totalReviewed: (stats.totalReviewed || 0) + 1
-  };
-  currentStudentProfile.ankiStats = updatedStats;
-
-  await setDoc(
-    doc(db, "users", currentStudentId),
-    {
-      studentId: currentStudentId,
-      fullName: currentStudentProfile.fullName || currentStudentId,
-      role: "student",
-      ankiStats: updatedStats
-    },
-    { merge: true }
-  );
-
-  populateAnkiDeckDropdown();
-  updateDashboardUI();
-  renderNextAnkiCard();
-}
-
-document.querySelectorAll(".rate-btn").forEach((btn) => {
-  btn.addEventListener("click", () => gradeCurrentCard(Number(btn.dataset.quality)));
-});
-document.getElementById("practice-all-btn")?.addEventListener("click", () => {
-  bonusMode = true;
-  buildAnkiQueue();
-});
 
 // ==========================================
 // DYNAMIC RUNNER & DISPATCHING (SHARED)
@@ -2858,111 +2614,6 @@ window.openAnalysisPage = function (assignmentId) {
     : `<p class="muted">No specific question-type mistakes logged for this test.</p>`;
 };
 
-function renderRecordedClipsList() {
-  const previewArea = document.getElementById("rec-preview-area");
-  const startBtn = document.getElementById("btn-start-rec");
-  const rerecordBtn = document.getElementById("btn-rerecord-rec");
-  const addMoreBtn = document.getElementById("btn-addmore-rec");
-  if (!previewArea) return;
-
-  if (recordedAudioList.length === 0) {
-    previewArea.classList.add("hidden");
-    previewArea.innerHTML = "";
-    if (startBtn) {
-      startBtn.textContent = "🔴 Start Recording";
-      startBtn.classList.remove("hidden");
-    }
-    rerecordBtn?.classList.add("hidden");
-    addMoreBtn?.classList.add("hidden");
-    return;
-  }
-
-  previewArea.classList.remove("hidden");
-  previewArea.innerHTML = recordedAudioList.map((clip, idx) => `
-    <div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:13px;">
-        <strong>🎙️ Recording ${idx + 1} <span class="muted" style="font-weight:400;">(${clip.duration})</span></strong>
-        <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger);border-color:#fecaca;" onclick="window.removeRecordedClip(${idx})">✕ Remove</button>
-      </div>
-      <audio controls src="${clip.url}" style="width:100%;height:36px;"></audio>
-    </div>
-  `).join("");
-
-  startBtn?.classList.add("hidden");
-  rerecordBtn?.classList.remove("hidden");
-  if (addMoreBtn) {
-    if (recordedAudioList.length < 5) addMoreBtn.classList.remove("hidden");
-    else addMoreBtn.classList.add("hidden");
-  }
-}
-
-window.removeRecordedClip = function (idx) {
-  recordedAudioList.splice(idx, 1);
-  renderRecordedClipsList();
-  const statusEl = document.getElementById("rec-status-label");
-  if (statusEl) {
-    statusEl.textContent = recordedAudioList.length > 0
-      ? `${recordedAudioList.length} recording(s) ready — re-record last or add another`
-      : "Ready to record";
-  }
-};
-
-window.startBrowserRecording = async function (replaceLast = false) {
-  if (!replaceLast && recordedAudioList.length >= 5) {
-    return alert("Maximum 5 recordings allowed per submission.");
-  }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recReplaceLast = replaceLast;
-    recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => { if (e.data.size > 0) recordedChunks.push(e.data); };
-    mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "audio/webm" });
-      const url = URL.createObjectURL(blob);
-      const mins = String(Math.floor(recSeconds / 60)).padStart(2, "0");
-      const secs = String(recSeconds % 60).padStart(2, "0");
-      const clipObj = { blob, url, duration: `${mins}:${secs}` };
-
-      if (recReplaceLast && recordedAudioList.length > 0) {
-        recordedAudioList[recordedAudioList.length - 1] = clipObj;
-      } else {
-        recordedAudioList.push(clipObj);
-      }
-
-      renderRecordedClipsList();
-      stream.getTracks().forEach((track) => track.stop());
-    };
-    mediaRecorder.start();
-    recSeconds = 0;
-    const takeNum = replaceLast && recordedAudioList.length > 0 ? recordedAudioList.length : recordedAudioList.length + 1;
-    document.getElementById("rec-status-label").innerHTML = `<span class="rec-dot"></span> Recording Take #${takeNum}...`;
-    document.getElementById("btn-start-rec")?.classList.add("hidden");
-    document.getElementById("btn-rerecord-rec")?.classList.add("hidden");
-    document.getElementById("btn-addmore-rec")?.classList.add("hidden");
-    document.getElementById("btn-stop-rec")?.classList.remove("hidden");
-
-    recInterval = setInterval(() => {
-      recSeconds++;
-      const mins = String(Math.floor(recSeconds / 60)).padStart(2, "0");
-      const secs = String(recSeconds % 60).padStart(2, "0");
-      document.getElementById("rec-timer-display").textContent = `${mins}:${secs}`;
-    }, 1000);
-  } catch (err) { alert("Microphone access denied."); }
-};
-
-window.stopBrowserRecording = function () {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
-  clearInterval(recInterval);
-  document.getElementById("rec-status-label").textContent = "Recording saved — listen below, re-record last, or add one more";
-  document.getElementById("btn-stop-rec")?.classList.add("hidden");
-};
-
-function stopActiveRecordingCleanup() {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
-  clearInterval(recInterval);
-}
-
 window.submitSpeakingHomework = async function (assignmentId) {
   if (recordedAudioList.length === 0) return alert("Please record your speaking answer first.");
   const btn = document.getElementById("submit-speaking-btn") || document.getElementById("pun-submit-speaking-btn");
@@ -3169,164 +2820,4 @@ function renderStatisticsPage() {
       </tr>
     `).join("");
   }
-}
-
-function buildScoreChart(canvasId, submissions, mocks, existingChart) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || typeof Chart === "undefined") return existingChart;
-  if (existingChart) existingChart.destroy();
-
-  const events = [];
-  mocks.forEach((m) => {
-    const shortMock = (m.mockTitle || "Mock").replace(/\s*20\d{2}\s*/g, " ").replace(/Mock Exam/i, "Mock").trim();
-    events.push({
-      sortKey: m.date || "2026-01-01",
-      label: shortMock,
-      listening: m.listening,
-      reading: m.reading,
-      writing: m.writing,
-      speaking: m.speaking,
-      overall: m.overall
-    });
-  });
-
-  const skillCounters = { listening: 0, reading: 0, writing: 0, speaking: 0 };
-  const sortedSubs = [...submissions].sort((a, b) => {
-    const tA = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : 0;
-    const tB = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : 0;
-    return tA - tB;
-  });
-
-  sortedSubs.forEach((sub) => {
-    const hw = ASSIGNMENTS.find((a) => a.id === sub.assignmentId)
-      || cachedTeacherHw.find((a) => a.id === sub.assignmentId)
-      || cachedTeacherPunishments.find((p) => p.id === sub.assignmentId);
-    if (!sub.bandScore || sub.isDrill || (hw && hw.isDrill)) return;
-    if ((sub.skill === "reading" || sub.skill === "listening") && Number(sub.totalQuestions) % 40 !== 0) return;
-
-    const dateObj = sub.submittedAt?.toDate ? sub.submittedAt.toDate() : (hw?.dueDate ? new Date(hw.dueDate) : new Date("2026-11-15"));
-    const dateStr = dateObj.toISOString().split("T")[0];
-    const shortDate = dateObj.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-    const capSkill = sub.skill.charAt(0).toUpperCase() + sub.skill.slice(1);
-
-    const bandsToPlot = (Array.isArray(sub.setBands) && sub.setBands.length > 0)
-      ? sub.setBands
-      : (Array.isArray(sub.setScores) && sub.setScores.length > 0)
-        ? sub.setScores.map((sc) => rawToIeltsBand(sc, 40))
-        : [sub.bandScore];
-
-    bandsToPlot.forEach((bandVal) => {
-      skillCounters[sub.skill] = (skillCounters[sub.skill] || 0) + 1;
-      events.push({
-        sortKey: dateStr,
-        label: `${capSkill} #${skillCounters[sub.skill]} (${shortDate})`,
-        listening: sub.skill === "listening" ? bandVal : null,
-        reading: sub.skill === "reading" ? bandVal : null,
-        writing: sub.skill === "writing" ? bandVal : null,
-        speaking: sub.skill === "speaking" ? bandVal : null,
-        overall: null
-      });
-    });
-  });
-
-  events.sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-  const labels = events.length > 0 ? events.map((e) => e.label) : ["No Scores Yet"];
-
-  return new Chart(canvas, {
-    type: "line",
-    data: {
-      labels,
-      datasets: [
-        { label: "Overall (Mock)", data: events.map((e) => e.overall), borderColor: "#0f172a", backgroundColor: "#0f172a", borderWidth: 3, spanGaps: true, tension: 0.25 },
-        { label: "Listening", data: events.map((e) => e.listening), borderColor: "#1d4ed8", backgroundColor: "#1d4ed8", spanGaps: true, tension: 0.25 },
-        { label: "Reading", data: events.map((e) => e.reading), borderColor: "#16a34a", backgroundColor: "#16a34a", spanGaps: true, tension: 0.25 },
-        { label: "Writing", data: events.map((e) => e.writing), borderColor: "#d97706", backgroundColor: "#d97706", spanGaps: true, tension: 0.25 },
-        { label: "Speaking", data: events.map((e) => e.speaking), borderColor: "#dc2626", backgroundColor: "#dc2626", spanGaps: true, tension: 0.25 }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      scales: {
-        x: {
-          ticks: {
-            maxRotation: 0,
-            minRotation: 0,
-            autoSkip: true,
-            font: { size: 11 }
-          },
-          grid: { display: false }
-        },
-        y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } }
-      },
-      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } }
-    }
-  });
-}
-
-function buildGroupCompareChart(canvasId, myMocks, groupMocks, existingChart) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || typeof Chart === "undefined") return existingChart;
-  if (existingChart) existingChart.destroy();
-
-  const latestByStudent = {};
-  groupMocks.forEach((m) => {
-    const prev = latestByStudent[m.studentId];
-    if (!prev || (m.date || "") >= (prev.date || "")) latestByStudent[m.studentId] = m;
-  });
-
-  const latestList = Object.values(latestByStudent);
-  const myLatest = myMocks.length > 0 ? myMocks[myMocks.length - 1] : null;
-
-  const avgSkill = (key) => {
-    if (latestList.length === 0) return 0;
-    const sum = latestList.reduce((acc, m) => acc + (Number(m[key]) || 0), 0);
-    return Number((sum / latestList.length).toFixed(1));
-  };
-  const maxSkill = (key) => {
-    if (latestList.length === 0) return 0;
-    return Math.max(...latestList.map((m) => Number(m[key]) || 0));
-  };
-  const skills = ["listening", "reading", "writing", "speaking", "overall"];
-
-  return new Chart(canvas, {
-    type: "bar",
-    data: {
-      labels: ["Listening", "Reading", "Writing", "Speaking", "Overall"],
-      datasets: [
-        { label: "You (Latest Mock)", data: skills.map((k) => (myLatest ? Number(myLatest[k]) : 0)), backgroundColor: "#1d4ed8", borderRadius: 6 },
-        { label: "Group Average", data: skills.map((k) => avgSkill(k)), backgroundColor: "#94a3b8", borderRadius: 6 },
-        { label: "Group Highest", data: skills.map((k) => maxSkill(k)), backgroundColor: "#16a34a", borderRadius: 6 }
-      ]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      scales: { y: { min: 4.0, max: 9.0, ticks: { stepSize: 0.5 } } },
-      plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } }
-    }
-  });
-}
-
-function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(--danger)") {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  const entries = Object.entries(mistakesObj || {}).map(([type, val]) => ({ type, wrong: typeof val === "number" ? val : (val.wrong || 0) })).filter((item) => item.wrong > 0).sort((a, b) => b.wrong - a.wrong);
-  if (entries.length === 0) {
-    container.innerHTML = `<p class="muted">${emptyText}</p>`;
-    return;
-  }
-  const maxWrong = Math.max(...entries.map((e) => e.wrong), 1);
-  container.innerHTML = entries.map((item) => {
-    const pct = Math.round((item.wrong / maxWrong) * 100);
-    return `
-      <div class="type-bar-row">
-        <div class="type-bar-head">
-          <span>${MISTAKE_LABELS[item.type] || item.type}</span>
-          <span style="color:${barColor};">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${barColor};"></div></div>
-      </div>
-    `;
-  }).join("");
 }
