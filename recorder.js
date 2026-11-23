@@ -3,10 +3,28 @@ import { revokeClipsList } from "./submissions.js";
 
 let mediaRecorder = null;
 let recordedChunks = [];
-let recordedAudioList = []; // Array of { blob, url, duration }
+let recordedAudioList = []; // Array of { blob, url, duration, ext }
 let recReplaceLast = false;
 let recInterval = null;
 let recSeconds = 0;
+
+function getSupportedAudioFormat() {
+  if (typeof MediaRecorder === "undefined") {
+    return { mimeType: "", ext: "webm" };
+  }
+  const candidates = [
+    { mimeType: "audio/webm;codecs=opus", ext: "webm" },
+    { mimeType: "audio/webm", ext: "webm" },
+    { mimeType: "audio/mp4", ext: "m4a" },
+    { mimeType: "audio/ogg;codecs=opus", ext: "ogg" }
+  ];
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(c.mimeType)) {
+      return c;
+    }
+  }
+  return { mimeType: "", ext: "m4a" };
+}
 
 export function getRecordedClips() {
   return recordedAudioList;
@@ -19,7 +37,11 @@ export function resetRecordedClips() {
 
 export function stopActiveRecordingCleanup() {
   if (mediaRecorder && mediaRecorder.state !== "inactive") {
-    mediaRecorder.stop();
+    try {
+      mediaRecorder.stop();
+    } catch {
+      // Ignore already stopped recorder
+    }
   }
   clearInterval(recInterval);
 }
@@ -52,7 +74,7 @@ export function renderRecordedClipsList() {
         <strong>🎙️ Recording ${idx + 1} <span class="muted" style="font-weight:400;">(${clip.duration})</span></strong>
         <button type="button" class="btn btn-outline btn-sm" style="padding:2px 8px;font-size:11px;color:var(--danger);border-color:#fecaca;" data-remove-clip="${idx}">✕ Remove</button>
       </div>
-      <audio controls src="${clip.url}" style="width:100%;height:36px;"></audio>
+      <audio controls playsinline preload="metadata" src="${clip.url}" style="width:100%;height:36px;"></audio>
     </div>
   `
     )
@@ -90,18 +112,42 @@ export async function startBrowserRecording(replaceLast = false) {
   }
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const format = getSupportedAudioFormat();
     recReplaceLast = replaceLast;
     recordedChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
+
+    mediaRecorder = format.mimeType
+      ? new MediaRecorder(stream, { mimeType: format.mimeType })
+      : new MediaRecorder(stream);
+
     mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) recordedChunks.push(e.data);
+      if (e.data && e.data.size > 0) {
+        recordedChunks.push(e.data);
+      }
     };
+
     mediaRecorder.onstop = () => {
-      const blob = new Blob(recordedChunks, { type: "audio/webm" });
+      stream.getTracks().forEach((track) => track.stop());
+
+      const actualMime = mediaRecorder.mimeType || format.mimeType || "audio/mp4";
+      const ext = actualMime.includes("mp4") || actualMime.includes("aac")
+        ? "m4a"
+        : actualMime.includes("ogg")
+          ? "ogg"
+          : "webm";
+
+      const blob = new Blob(recordedChunks, { type: actualMime });
+
+      if (blob.size < 500) {
+        notify("Recording captured no audio (empty file). Please check your mic or upload an audio file below.", "error");
+        renderRecordedClipsList();
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const mins = String(Math.floor(recSeconds / 60)).padStart(2, "0");
       const secs = String(recSeconds % 60).padStart(2, "0");
-      const clipObj = { blob, url, duration: `${mins}:${secs}` };
+      const clipObj = { blob, url, duration: `${mins}:${secs}`, ext };
 
       if (recReplaceLast && recordedAudioList.length > 0) {
         const old = recordedAudioList[recordedAudioList.length - 1];
@@ -111,15 +157,21 @@ export async function startBrowserRecording(replaceLast = false) {
         recordedAudioList.push(clipObj);
       }
 
+      const statusEl = document.getElementById("rec-status-label");
+      if (statusEl) {
+        statusEl.textContent = "Recording saved — listen below, re-record last, or add one more";
+      }
       renderRecordedClipsList();
-      stream.getTracks().forEach((track) => track.stop());
     };
-    mediaRecorder.start();
+
+    // Collect audio chunks every 1 second so mobile browsers never lose the buffer
+    mediaRecorder.start(1000);
     recSeconds = 0;
+
     const takeNum =
       replaceLast && recordedAudioList.length > 0 ? recordedAudioList.length : recordedAudioList.length + 1;
     document.getElementById("rec-status-label").innerHTML =
-      `<span class="rec-dot"></span> Recording Take #${takeNum}...`;
+      `<span class="rec-dot"></span> Recording Take #${takeNum}... (Keep screen awake)`;
     document.getElementById("btn-start-rec")?.classList.add("hidden");
     document.getElementById("btn-rerecord-rec")?.classList.add("hidden");
     document.getElementById("btn-addmore-rec")?.classList.add("hidden");
@@ -132,16 +184,19 @@ export async function startBrowserRecording(replaceLast = false) {
       document.getElementById("rec-timer-display").textContent = `${mins}:${secs}`;
     }, 1000);
   } catch {
-    notify("Microphone access denied. Please allow microphone permissions.", "error");
+    notify("Microphone access denied. Allow mic permissions or upload a Voice Memo file below.", "error");
   }
 }
 
 export function stopBrowserRecording() {
-  if (mediaRecorder && mediaRecorder.state !== "inactive") mediaRecorder.stop();
   clearInterval(recInterval);
-  const statusEl = document.getElementById("rec-status-label");
-  if (statusEl) {
-    statusEl.textContent = "Recording saved — listen below, re-record last, or add one more";
+  if (mediaRecorder && mediaRecorder.state !== "inactive") {
+    try {
+      mediaRecorder.requestData();
+    } catch {
+      // Ignore if unsupported
+    }
+    mediaRecorder.stop();
   }
   document.getElementById("btn-stop-rec")?.classList.add("hidden");
 }
