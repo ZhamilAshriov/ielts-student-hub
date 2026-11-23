@@ -7,7 +7,6 @@ export function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-// Non-blocking toast banner (replaces alert() across the app)
 export function notify(message, type = "info") {
   let container = document.getElementById("toast-container");
   if (!container) {
@@ -36,7 +35,6 @@ export function notify(message, type = "info") {
   }, 3800);
 }
 
-// Consistent button loading state wrapper
 export async function withLoading(button, loadingLabel, operation) {
   if (!button) return operation();
   if (button.disabled) return null;
@@ -56,7 +54,6 @@ export async function withLoading(button, loadingLabel, operation) {
   }
 }
 
-// Consistent Local Date & Deadline Helpers
 export function getTodayStr(offsetDays = 0) {
   const d = new Date();
   d.setDate(d.getDate() + offsetDays);
@@ -85,7 +82,6 @@ export function isPastDeadline(dueDateStr, graceHours = 0) {
   return Date.now() > dueMs;
 }
 
-// Strict File Validation before Cloudinary upload
 export function validateImageFiles(fileList, { maxFiles = 8, maxSizeMB = 10 } = {}) {
   const files = Array.from(fileList || []);
   if (files.length === 0) return { valid: false, error: "Please select at least one image." };
