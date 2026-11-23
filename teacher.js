@@ -28,6 +28,7 @@ import {
 import { uploadImagesToCloudinary } from "./submissions.js";
 import {
   MISTAKE_LABELS,
+  rawToIeltsBand,
   calcOverallIelts,
   buildScoreChart,
   renderMistakeBars
@@ -954,12 +955,24 @@ export function renderTeacherGradingQueue(students, submissions) {
       )
       .join("");
 
+    const hasMultiSets = Array.isArray(sub.setScores) && sub.setScores.length > 1;
+    const autoSetBands = hasMultiSets ? sub.setScores.map((sc) => rawToIeltsBand(Number(sc), 40)) : [];
+
     let contentHtml = "";
     if (skill === "reading" || skill === "listening") {
+      const scoreSummaryHtml = hasMultiSets
+        ? `${sub.setScores.map((sc) => `${sc}/40`).join(", ")} <span class="muted" style="font-size:12px;">(${sub.rawScore ?? 0}/${sub.totalQuestions ?? 40} total)</span> ` +
+          autoSetBands
+            .map((b, idx) => `<span class="badge badge-blue" style="margin-left:4px;">Set ${idx + 1}: Band ${b.toFixed(1)}</span>`)
+            .join("")
+        : `${sub.rawScore ?? 0} / ${sub.totalQuestions ?? 40} ` +
+          (sub.bandScore
+            ? `<span class="badge badge-blue" style="margin-left:6px;">Band ${sub.bandScore}</span>`
+            : `<span class="badge badge-gray" style="margin-left:6px;">Practice Drill</span>`);
+
       contentHtml = `
         <div style="margin:10px 0;font-size:14px;">
-          <strong>Reported Score:</strong> ${sub.rawScore ?? 0} / ${sub.totalQuestions ?? 40}
-          ${sub.bandScore ? `<span class="badge badge-blue" style="margin-left:6px;">Band ${sub.bandScore}</span>` : `<span class="badge badge-gray" style="margin-left:6px;">Practice Drill</span>`}
+          <strong>Reported Score:</strong> ${scoreSummaryHtml}
         </div>
         ${imgHtml ? `<div style="margin-top:8px;">${imgHtml}</div>` : ""}`;
     } else if (skill === "writing") {
@@ -1008,20 +1021,28 @@ export function renderTeacherGradingQueue(students, submissions) {
 
     let bandInputHtml = "";
     if (!noBandRequired) {
-      if (Array.isArray(sub.setScores) && sub.setScores.length > 1) {
+      if (hasMultiSets) {
         bandInputHtml = sub.setScores
           .map((sc, idx) => {
-            const existingSetBand = Array.isArray(sub.setBands) ? sub.setBands[idx] : "";
-            return `<select class="set-band-select-${escapeHtml(sub.docId)}" style="width:145px;" title="Test Set ${idx + 1} (${sc}/40)">
-              <option value="">Set ${idx + 1} (${sc}/40)</option>
-              ${buildBandOptions(existingSetBand)}
+            const defaultBand =
+              Array.isArray(sub.setBands) && sub.setBands[idx] != null
+                ? Number(sub.setBands[idx]).toFixed(1)
+                : autoSetBands[idx].toFixed(1);
+            return `<select class="set-band-select-${escapeHtml(sub.docId)}" style="width:155px;" title="Set ${idx + 1}: ${sc}/40">
+              ${buildBandOptions(defaultBand)}
             </select>`;
           })
           .join("");
       } else {
+        const defaultSingleBand =
+          sub.bandScore != null
+            ? Number(sub.bandScore).toFixed(1)
+            : (skill === "reading" || skill === "listening") && sub.rawScore != null
+              ? rawToIeltsBand(Number(sub.rawScore), Number(sub.totalQuestions) || 40).toFixed(1)
+              : "";
         bandInputHtml = `<select id="band-${escapeHtml(sub.docId)}" style="width:125px;">
           <option value="">-- Band --</option>
-          ${buildBandOptions(sub.bandScore)}
+          ${buildBandOptions(defaultSingleBand)}
         </select>`;
       }
     }
