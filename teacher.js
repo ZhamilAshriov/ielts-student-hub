@@ -22,8 +22,12 @@ import {
   withLoading,
   getTodayStr,
   formatDueDate,
-  parseLocalDeadline
+  parseLocalDeadline,
+  loadExternalScript
 } from "./utils.js";
+
+const QRCODE_JS_CDN = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+let mocksLoaded = false;
 import { uploadImagesToCloudinary } from "./submissions.js";
 import {
   MISTAKE_LABELS,
@@ -105,7 +109,7 @@ function bindTeacherDelegatedClicks() {
         renderTeacherAnnouncementsList(store.cachedAnnouncements)
       );
     } else if (action === "inspect-student") {
-      inspectStudent(btn.dataset.studentId);
+      await inspectStudent(btn.dataset.studentId);
     } else if (action === "delete-ann") {
       await deleteAnnouncement(btn.dataset.docId);
     } else if (action === "toggle-archived-hw") {
@@ -141,11 +145,22 @@ function bindTeacherDelegatedClicks() {
   });
 }
 
+export async function ensureTeacherMocksLoaded(force = false) {
+  if (mocksLoaded && !force) return;
+  const mocksSnap = await getDocs(collection(db, "mockScores"));
+  const mocks = [];
+  mocksSnap.forEach((d) => mocks.push({ docId: d.id, ...d.data() }));
+  mocks.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+  store.cachedMocks = mocks;
+  mocksLoaded = true;
+  renderRecentMocksTable(store.cachedStudents, store.cachedMocks);
+}
+
 export async function loadTeacherData() {
-  const [usersSnap, subsSnap, mocksSnap, annSnap, customHwSnap, punSnap] = await Promise.all([
+  mocksLoaded = false;
+  const [usersSnap, subsSnap, annSnap, customHwSnap, punSnap] = await Promise.all([
     getDocs(collection(db, "users")),
     getDocs(collection(db, "submissions")),
-    getDocs(collection(db, "mockScores")),
     getDocs(collection(db, "announcements")),
     getDocs(collection(db, "customAssignments")),
     getDocs(collection(db, "punishments"))
@@ -161,11 +176,6 @@ export async function loadTeacherData() {
   const submissions = [];
   subsSnap.forEach((d) => submissions.push({ docId: d.id, ...d.data() }));
   store.cachedSubmissions = submissions;
-
-  const mocks = [];
-  mocksSnap.forEach((d) => mocks.push({ docId: d.id, ...d.data() }));
-  mocks.sort((a, b) => (b.date || "").localeCompare(a.date || ""));
-  store.cachedMocks = mocks;
 
   const rawAnns = [];
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
@@ -186,11 +196,9 @@ export async function loadTeacherData() {
   renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
   populateMockStudentDropdown(store.cachedStudents);
   populateTargetDropdowns(store.cachedStudents);
-  renderRecentMocksTable(store.cachedStudents, store.cachedMocks);
   renderTeacherAnnouncementsList(store.cachedAnnouncements);
   renderTeacherCustomHw(store.cachedTeacherHw, store.cachedStudents);
   renderTeacherPunishments(store.cachedTeacherPunishments, store.cachedStudents);
-  renderTeacherAttendanceManager();
 }
 
 function populateTargetDropdowns(students) {
@@ -654,9 +662,11 @@ function renderTeacherRoster(students) {
     .join("");
 }
 
-function inspectStudent(studentId) {
+async function inspectStudent(studentId) {
   const student = store.cachedStudents.find((s) => s.studentId === studentId);
   if (!student) return;
+  await ensureTeacherMocksLoaded();
+
   const card = document.getElementById("teacher-inspector-card");
   card.classList.remove("hidden");
   document.getElementById("inspector-student-title").textContent = `${student.fullName} (${student.studentId}) — Performance Profile`;
@@ -664,7 +674,7 @@ function inspectStudent(studentId) {
   const sSubs = store.cachedSubmissions.filter((sub) => sub.studentId === studentId);
   const sMocks = store.cachedMocks.filter((m) => m.studentId === studentId);
 
-  inspectorChartInstance = buildScoreChart("inspector-score-chart", sSubs, sMocks, inspectorChartInstance);
+  inspectorChartInstance = await buildScoreChart("inspector-score-chart", sSubs, sMocks, inspectorChartInstance);
   renderMistakeBars("inspector-mistakes-box", student.permanentMistakes || {}, "No mistakes logged yet.");
   card.scrollIntoView({ behavior: "smooth" });
 }
@@ -1274,10 +1284,14 @@ Return valid JSON with three fields:
   });
 }
 
-async function renderTeacherAttendanceManager() {
+export async function renderTeacherAttendanceManager() {
   const canvas = document.getElementById("teacher-qr-canvas");
   const dateLabel = document.getElementById("qr-date-label");
   if (!canvas) return;
+
+  if (typeof QRCode === "undefined") {
+    await loadExternalScript(QRCODE_JS_CDN);
+  }
 
   const today = getTodayStr();
   if (dateLabel) dateLabel.textContent = `Lesson Date: ${today}`;
