@@ -655,13 +655,27 @@ function renderTaskRunnerWorkspace({ task, leftPane, rightPane, collectionName =
         </div>
         <div id="rec-preview-area" class="hidden" style="margin-top:16px;text-align:left;"></div>
       </div>
+      <div class="form-group" style="border-top:1px dashed var(--border);padding-top:14px;margin-top:4px;">
+        <label style="font-size:13px;">Or Upload Audio File(s) from Phone / Dictaphone (MP3, M4A, WAV, OGG)</label>
+        <input type="file" id="runner-spk-files" accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm" multiple />
+      </div>
       <button type="button" class="btn btn-primary btn-full" id="runner-submit-btn">Upload & Submit Speaking</button>`;
 
     document.getElementById("runner-submit-btn")?.addEventListener("click", async (e) => {
       const btn = e.currentTarget;
-      const clips = getRecordedClips();
-      await withLoading(btn, `Uploading ${clips.length} recording(s)...`, async () => {
-        const audioUrls = await uploadAudioClipsToCloudinary(clips, task.id);
+      const recorded = getRecordedClips();
+      const uploadedFiles = Array.from(document.getElementById("runner-spk-files")?.files || []);
+      const combinedItems = recorded.length > 0 ? recorded : uploadedFiles;
+
+      if (combinedItems.length === 0) {
+        return notify("Please record your answer or attach an audio file first.", "warning");
+      }
+      if (combinedItems.length > 5) {
+        return notify("Maximum 5 audio files allowed per submission.", "warning");
+      }
+
+      await withLoading(btn, `Uploading ${combinedItems.length} audio file(s)...`, async () => {
+        const audioUrls = await uploadAudioClipsToCloudinary(combinedItems, task.id);
         await submitTaskSubmission({
           task,
           collectionName,
