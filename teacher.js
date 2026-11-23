@@ -540,8 +540,9 @@ async function handleCreateStudent(e) {
   await withLoading(btn, "Creating...", async () => {
     try {
       const email = studentId.toLowerCase() + LOGIN_DOMAIN;
-      await createUserWithEmailAndPassword(secondaryAuth, email, password);
-      await signOut(secondaryAuth);
+      const secAuth = getSecondaryAuth();
+      await createUserWithEmailAndPassword(secAuth, email, password);
+      await signOut(secAuth);
 
       await setDoc(doc(db, "users", studentId), {
         studentId,
