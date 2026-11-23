@@ -844,6 +844,10 @@ function renderTeacherHwMatrix(students, submissions) {
 }
 
 export function renderTeacherGradingQueue(students, submissions) {
+  const container = document.getElementById("grading-list-container");
+  const badge = document.getElementById("nav-grade-badge");
+  if (!container) return;
+
   const studentMap = {};
   students.forEach((s) => {
     studentMap[s.studentId] = s.fullName;
