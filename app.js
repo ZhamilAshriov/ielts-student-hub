@@ -8,7 +8,11 @@ import { auth, LOGIN_DOMAIN } from "./firebase.js";
 import { store, clearLoginTimer, resolveUserRole } from "./store.js";
 import { getTodayStr, notify, withLoading } from "./utils.js";
 import { stopActiveRecordingCleanup } from "./recorder.js";
-import { initTeacherModule } from "./teacher.js";
+import {
+  initTeacherModule,
+  ensureTeacherMocksLoaded,
+  renderTeacherAttendanceManager
+} from "./teacher.js";
 import {
   initStudentModule,
   showHomeworkListView,
@@ -25,9 +29,12 @@ if ("serviceWorker" in navigator) {
     }
   });
 
-  navigator.serviceWorker.register("./sw.js").then((reg) => {
-    reg.update().catch(() => {});
-  }).catch(() => {});
+  navigator.serviceWorker
+    .register("./sw.js")
+    .then((reg) => {
+      reg.update().catch(() => {});
+    })
+    .catch(() => {});
 }
 
 function formatLoginEmail(rawId) {
@@ -109,14 +116,16 @@ document.getElementById("change-password-form")?.addEventListener("submit", asyn
 // NAVIGATION & AUTH STATE ROUTER
 // ==========================================
 document.querySelectorAll(".nav-tab").forEach((tab) => {
-  tab.addEventListener("click", () => {
+  tab.addEventListener("click", async () => {
     tab.parentElement.querySelectorAll(".nav-tab").forEach((t) => t.classList.remove("active"));
     tab.classList.add("active");
     switchView(tab.dataset.target);
 
     if (tab.dataset.target === "student-homework") showHomeworkListView();
     else if (tab.dataset.target === "student-punishments") renderStudentPunishmentsList();
-    else if (tab.dataset.target === "student-stats") renderStatisticsPage();
+    else if (tab.dataset.target === "student-stats") await renderStatisticsPage();
+    else if (tab.dataset.target === "teacher-mocks") await ensureTeacherMocksLoaded();
+    else if (tab.dataset.target === "teacher-attendance") await renderTeacherAttendanceManager();
   });
 });
 
