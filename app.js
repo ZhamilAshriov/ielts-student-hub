@@ -17,7 +17,17 @@ import {
 } from "./student.js";
 
 if ("serviceWorker" in navigator) {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+
+  navigator.serviceWorker.register("./sw.js").then((reg) => {
+    reg.update().catch(() => {});
+  }).catch(() => {});
 }
 
 function formatLoginEmail(rawId) {
