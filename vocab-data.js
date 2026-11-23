@@ -1,4 +1,4 @@
-// LESSON VOCABULARY DECKS — TOPIC: GRATITUDE & REPUTATION
+// LESSON VOCABULARY DECKS — TOPIC: GRATITUDE, REPUTATION & WRITING COLLOCATIONS
 
 export const VOCAB_DECKS = [
   {
@@ -640,6 +640,84 @@ export const VOCAB_DECKS = [
         word: "word family: honesty / honest / dishonest",
         definition: "Noun: honesty | Adj: honest | Opposite: dishonest.",
         example: "Academic honesty is fundamental, and any dishonest behavior results in automatic failure."
+      }
+    ]
+  },
+  {
+    deckId: "writing-collocations-1",
+    title: "Writing Task 2: Effects, Solutions & Results",
+    cards: [
+      {
+        id: "wc1-01",
+        word: "Pose a threat to [noun]",
+        definition: "To present a danger or risk of harm to something or someone.",
+        example: "Unregulated artificial intelligence could pose a threat to public safety and local traditions."
+      },
+      {
+        id: "wc1-02",
+        word: "Put a strain on [noun]",
+        definition: "To place heavy pressure or excessive demand on a resource, system, or person.",
+        example: "An aging population will inevitably put a strain on healthcare systems and family budgets."
+      },
+      {
+        id: "wc1-03",
+        word: "Erode the quality of [noun]",
+        definition: "To gradually weaken, damage, or lower the standard of something over time.",
+        example: "Overcrowded classrooms can seriously erode the quality of education and daily life."
+      },
+      {
+        id: "wc1-04",
+        word: "Hinder the development of [noun]",
+        definition: "To slow down, obstruct, or prevent the growth and progress of something.",
+        example: "Excessive screen time among teenagers may hinder the development of social skills, while high taxes can hinder the development of small businesses."
+      },
+      {
+        id: "wc1-05",
+        word: "Tackle the root of [noun]",
+        definition: "To address the fundamental underlying cause of a problem rather than just its symptoms.",
+        example: "Governments must invest in education and job creation to tackle the root of the crisis and reduce crime."
+      },
+      {
+        id: "wc1-06",
+        word: "Foster a culture of [noun]",
+        definition: "To actively encourage, nurture, and promote a shared mindset or habit within a community or organization.",
+        example: "Modern workplaces should foster a culture of innovation and lifelong learning."
+      },
+      {
+        id: "wc1-07",
+        word: "Enforce stricter rules on [noun]",
+        definition: "To apply tougher regulations and ensure people or companies obey them.",
+        example: "Authorities need to enforce stricter rules on advertising and carbon emissions."
+      },
+      {
+        id: "wc1-08",
+        word: "Shift the focus toward [noun]",
+        definition: "To redirect primary attention, effort, and resources toward a new priority.",
+        example: "Instead of relying solely on punishment, policymakers should shift the focus toward prevention and skill-building."
+      },
+      {
+        id: "wc1-09",
+        word: "Ease the pressure on [noun]",
+        definition: "To reduce stress, workload, or heavy demand affecting someone or something.",
+        example: "Affordable childcare and better public transit can help ease the pressure on working parents and city roads."
+      },
+      {
+        id: "wc1-10",
+        word: "Reverse the trend of [noun]",
+        definition: "To stop a negative pattern or decline and turn it back in a positive direction.",
+        example: "Targeted rural investment and reading programs can help reverse the trend of declining literacy and rural depopulation."
+      },
+      {
+        id: "wc1-11",
+        word: "Pave the way for [noun]",
+        definition: "To create the necessary conditions that make future progress or success possible.",
+        example: "Investing in clean energy and accessible schooling will pave the way for sustainable growth and equal opportunities."
+      },
+      {
+        id: "wc1-12",
+        word: "Restore balance to [noun]",
+        definition: "To bring stability and harmony back to something that has been disrupted.",
+        example: "Flexible working hours and conservation laws can restore balance to work and personal life as well as fragile ecosystems."
       }
     ]
   }
