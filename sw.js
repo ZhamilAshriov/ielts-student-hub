@@ -1,16 +1,24 @@
-const CACHE_NAME = "ielts-hub-v2";
+const CACHE_NAME = "ielts-hub-v3";
 const CORE_ASSETS = [
   "./",
   "./index.html",
-  "./style.css",
+  "./styles.css",
   "./app.js",
+  "./firebase.js",
+  "./store.js",
+  "./utils.js",
+  "./submissions.js",
+  "./anki.js",
+  "./recorder.js",
+  "./charts.js",
+  "./announcements.js",
+  "./teacher.js",
+  "./student.js",
   "./vocab-data.js",
   "./assignments-data.js",
-  "./resources-data.js",
-  "./manifest.json"
+  "./resources-data.js"
 ];
 
-// 1. Install: pre-cache core shell & activate immediately
 self.addEventListener("install", (event) => {
   self.skipWaiting();
   event.waitUntil(
@@ -18,45 +26,57 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// 2. Activate: delete any outdated cache versions & claim open tabs
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => key !== CACHE_NAME)
-          .map((oldKey) => caches.delete(oldKey))
-      )
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
     ).then(() => self.clients.claim())
   );
 });
 
-// 3. Fetch: Network-first with cache:"no-store" for HTML/JS/CSS; ignore external APIs
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
 
   const url = new URL(req.url);
 
-  // Never intercept Firebase, Cloudinary, Chart.js CDN, or YouTube requests
-  if (url.origin !== self.location.origin) return;
+  // Never intercept Firebase, Firestore, Cloudinary, or Gemini API calls
+  if (
+    url.hostname.includes("googleapis.com") ||
+    url.hostname.includes("firebaseio.com") ||
+    url.hostname.includes("cloudinary.com")
+  ) {
+    return;
+  }
 
-  const isCodeOrDoc =
-    req.mode === "navigate" ||
-    url.pathname.endsWith(".html") ||
-    url.pathname.endsWith(".js") ||
-    url.pathname.endsWith(".css") ||
-    url.pathname.endsWith("/");
-
-  if (isCodeOrDoc) {
+  // Same-origin app files (.html, .js, .css): Network-First so updates arrive immediately
+  if (url.origin === self.location.origin) {
     event.respondWith(
-      fetch(req, { cache: "no-store" })
+      fetch(req)
         .then((networkRes) => {
-          const copy = networkRes.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          if (networkRes && networkRes.status === 200) {
+            const copy = networkRes.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          }
           return networkRes;
         })
         .catch(() => caches.match(req))
     );
+    return;
   }
+
+  // External static CDNs (Chart.js, QRCode.js, Firebase SDK): Cache-First
+  event.respondWith(
+    caches.match(req).then(
+      (cached) =>
+        cached ||
+        fetch(req).then((networkRes) => {
+          if (networkRes && networkRes.status === 200) {
+            const copy = networkRes.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(req, copy));
+          }
+          return networkRes;
+        })
+    )
+  );
 });
