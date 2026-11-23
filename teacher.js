@@ -47,6 +47,11 @@ let showArchivedMatrixHw = false;
 let showArchivedGraded = false;
 let teacherListenersBound = false;
 
+function toCloudinaryThumb(url, width = 450) {
+  if (!url || !url.includes("/image/upload/")) return url;
+  return url.replace("/image/upload/", `/image/upload/w_${width},q_auto,f_auto/`);
+}
+
 export function initTeacherModule() {
   if (!teacherListenersBound) {
     bindTeacherStaticListeners();
@@ -881,7 +886,7 @@ function renderTeacherGradingQueue(students, submissions) {
         const imgHtml = allScreenshots
           .map(
             (url) =>
-              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(url)}" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
+              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
           )
           .join("");
 
@@ -889,7 +894,7 @@ function renderTeacherGradingQueue(students, submissions) {
         const chartImgHtml = allCharts
           .map(
             (url) =>
-              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(url)}" alt="Task 1 Chart" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
+              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Task 1 Chart" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
           )
           .join("");
 
