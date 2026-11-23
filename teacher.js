@@ -26,7 +26,7 @@ import {
   loadExternalScript
 } from "./utils.js";
 
-const QRCODE_JS_CDN = "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js";
+const QRCODE_JS_CDN = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
 let mocksLoaded = false;
 import { uploadImagesToCloudinary } from "./submissions.js";
 import {
@@ -1290,7 +1290,11 @@ export async function renderTeacherAttendanceManager() {
   if (!canvas) return;
 
   if (typeof QRCode === "undefined") {
-    await loadExternalScript(QRCODE_JS_CDN);
+    try {
+      await loadExternalScript(QRCODE_JS_CDN);
+    } catch (err) {
+      console.error("QRCode library failed to load:", err);
+    }
   }
 
   const today = getTodayStr();
