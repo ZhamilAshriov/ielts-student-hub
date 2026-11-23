@@ -25,13 +25,9 @@ import {
   parseLocalDeadline,
   loadExternalScript
 } from "./utils.js";
-
-const QRCODE_JS_CDN = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
-let mocksLoaded = false;
 import { uploadImagesToCloudinary } from "./submissions.js";
 import {
   MISTAKE_LABELS,
-  rawToIeltsBand,
   calcOverallIelts,
   buildScoreChart,
   renderMistakeBars
@@ -45,11 +41,15 @@ import {
 } from "./announcements.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
 
+const QRCODE_JS_CDN = "https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js";
+
 let inspectorChartInstance = null;
 let showArchivedCustomHw = false;
 let showArchivedMatrixHw = false;
 let showArchivedGraded = false;
 let teacherListenersBound = false;
+let mocksLoaded = false;
+let gradingSkillFilter = "all";
 
 function toCloudinaryThumb(url, width = 450) {
   if (!url || !url.includes("/image/upload/")) return url;
@@ -135,6 +135,9 @@ function bindTeacherDelegatedClicks() {
       await transcribeAndEvaluateSpeaking(btn.dataset.docId);
     } else if (action === "set-gemini-key") {
       setTeacherGeminiKey();
+    } else if (action === "filter-grading-skill") {
+      gradingSkillFilter = btn.dataset.skill;
+      renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
     }
   });
 
@@ -748,6 +751,7 @@ async function handleSaveMockScore(e) {
     e.target.reset();
     document.getElementById("mock-date-input").value = getTodayStr();
     await loadTeacherData();
+    await ensureTeacherMocksLoaded(true);
   });
 }
 
@@ -839,207 +843,230 @@ function renderTeacherHwMatrix(students, submissions) {
     ${rows}`;
 }
 
-function renderTeacherGradingQueue(students, submissions) {
-  const container = document.getElementById("grading-list-container");
+export function renderTeacherGradingQueue(students, submissions) {
+  const container = document.getElementById("teacher-grading-list");
+  const badge = document.getElementById("grading-queue-badge");
   if (!container) return;
 
-  const ungradedCount = submissions.filter((s) => s.status !== "graded").length;
-  document.getElementById("nav-grade-badge").textContent = ungradedCount;
+  const studentMap = {};
+  students.forEach((s) => {
+    studentMap[s.studentId] = s.fullName;
+  });
 
-  const cutoffMs = Date.now() - 24 * 60 * 60 * 1000;
-  const isExpiredGraded = (sub) => {
-    if (sub.status !== "graded") return false;
-    const gradedMs = sub.gradedAt?.toMillis ? sub.gradedAt.toMillis() : typeof sub.gradedAt === "number" ? sub.gradedAt : 0;
-    return gradedMs > 0 && gradedMs < cutoffMs;
+  const allAssignments = [...ASSIGNMENTS, ...store.cachedTeacherHw, ...store.cachedTeacherPunishments];
+  const hwMap = {};
+  allAssignments.forEach((a) => {
+    hwMap[a.id] = a;
+  });
+
+  const pendingAll = submissions
+    .filter((sub) => sub.status !== "graded")
+    .sort((a, b) => {
+      const tA = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : 0;
+      const tB = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : 0;
+      return tB - tA;
+    });
+
+  const gradedAll = submissions
+    .filter((sub) => sub.status === "graded")
+    .sort((a, b) => {
+      const tA = a.gradedAt?.toMillis ? a.gradedAt.toMillis() : a.gradedAt || 0;
+      const tB = b.gradedAt?.toMillis ? b.gradedAt.toMillis() : b.gradedAt || 0;
+      return tB - tA;
+    });
+
+  if (badge) badge.textContent = pendingAll.length;
+
+  const skillTabs = [
+    { key: "all", label: "All" },
+    { key: "listening", label: "Listening" },
+    { key: "reading", label: "Reading" },
+    { key: "speaking", label: "Speaking" },
+    { key: "writing", label: "Writing" },
+    { key: "grammar", label: "Grammar" },
+    { key: "other", label: "Other" }
+  ];
+
+  const getSkillBucket = (sub) => {
+    const sk = (sub.skill || "other").toLowerCase();
+    return ["listening", "reading", "speaking", "writing", "grammar"].includes(sk) ? sk : "other";
   };
 
-  const visibleSubmissions = showArchivedGraded ? [...submissions] : submissions.filter((s) => !isExpiredGraded(s));
-  const hiddenCount = submissions.length - visibleSubmissions.length;
+  const counts = { all: pendingAll.length };
+  pendingAll.forEach((sub) => {
+    const bucket = getSkillBucket(sub);
+    counts[bucket] = (counts[bucket] || 0) + 1;
+  });
 
-  const toggleBarHtml =
-    hiddenCount > 0 || showArchivedGraded
-      ? `<div style="display:flex;justify-content:flex-end;margin-bottom:12px;">
+  const subNavHtml = `
+    <div style="display:flex;gap:8px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border);overflow-x:auto;flex-wrap:wrap;align-items:center;">
+      ${skillTabs
+        .map((t) => {
+          const active = gradingSkillFilter === t.key;
+          const cnt = counts[t.key] || 0;
+          return `<button type="button" class="btn ${active ? "btn-primary" : "btn-outline"} btn-sm" data-action="filter-grading-skill" data-skill="${t.key}" style="white-space:nowrap;">
+            ${t.label} (${cnt})
+          </button>`;
+        })
+        .join("")}
+      <button type="button" class="btn btn-outline btn-sm" style="margin-left:auto;white-space:nowrap;" data-action="set-gemini-key">🔑 AI Key</button>
+    </div>
+  `;
+
+  const matchesSkill = (sub) =>
+    gradingSkillFilter === "all" || getSkillBucket(sub) === gradingSkillFilter;
+
+  const filteredPending = pendingAll.filter(matchesSkill);
+  const filteredGraded = showArchivedGraded ? gradedAll.filter(matchesSkill) : [];
+
+  const renderCard = (sub, isAlreadyGraded) => {
+    const sName = studentMap[sub.studentId] || sub.studentId;
+    const hw = hwMap[sub.assignmentId];
+    const hwTitle = hw ? hw.title || hw.reason : sub.assignmentId;
+    const skill = (sub.skill || "other").toLowerCase();
+    const noBandRequired =
+      skill === "grammar" ||
+      skill === "other" ||
+      sub.isDrill ||
+      ((skill === "reading" || skill === "listening") && Number(sub.totalQuestions) % 40 !== 0);
+
+    const allScreenshots = Array.isArray(sub.screenshotUrls)
+      ? sub.screenshotUrls
+      : sub.screenshotUrl
+        ? [sub.screenshotUrl]
+        : [];
+    const imgHtml = allScreenshots
+      .map(
+        (url) =>
+          `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
+      )
+      .join("");
+
+    const allCharts = Array.isArray(sub.chartImageUrls)
+      ? sub.chartImageUrls
+      : sub.chartImageUrl
+        ? [sub.chartImageUrl]
+        : [];
+    const chartImgHtml = allCharts
+      .map(
+        (url) =>
+          `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Task 1 Chart" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
+      )
+      .join("");
+
+    let contentHtml = "";
+    if (skill === "reading" || skill === "listening") {
+      contentHtml = `
+        <div style="margin:10px 0;font-size:14px;">
+          <strong>Reported Score:</strong> ${sub.rawScore ?? 0} / ${sub.totalQuestions ?? 40}
+          ${sub.bandScore ? `<span class="badge badge-blue" style="margin-left:6px;">Band ${sub.bandScore}</span>` : `<span class="badge badge-gray" style="margin-left:6px;">Practice Drill</span>`}
+        </div>
+        ${imgHtml ? `<div style="margin-top:8px;">${imgHtml}</div>` : ""}`;
+    } else if (skill === "writing") {
+      contentHtml = `
+        ${chartImgHtml ? `<div style="margin-top:8px;">${chartImgHtml}</div>` : ""}
+        <div class="passage-box" style="margin:10px 0;max-height:220px;overflow-y:auto;white-space:pre-line;font-size:13px;">${escapeHtml(sub.essayText || "")}</div>
+        <div class="muted" style="font-size:12px;">Word count: ${sub.wordCount || 0} words</div>`;
+    } else if (skill === "speaking") {
+      const audios = Array.isArray(sub.audioUrls) ? sub.audioUrls : sub.audioUrl ? [sub.audioUrl] : [];
+      const audioPlayers = audios
+        .map(
+          (url, i) => `
+          <div style="margin-top:8px;">
+            <div style="font-size:12px;font-weight:600;margin-bottom:4px;">Recording #${i + 1}</div>
+            <audio controls preload="metadata" src="${escapeHtml(url)}" style="width:100%;height:36px;"></audio>
+          </div>`
+        )
+        .join("");
+      contentHtml = audioPlayers || `<p class="muted">No audio attached.</p>`;
+    } else {
+      contentHtml = `
+        ${sub.notes ? `<div class="passage-box" style="margin:10px 0;font-size:13px;white-space:pre-line;">${escapeHtml(sub.notes)}</div>` : ""}
+        ${imgHtml ? `<div style="margin-top:8px;">${imgHtml}</div>` : ""}`;
+    }
+
+    const aiBoxHtml =
+      sub.transcript || sub.aiEvaluation
+        ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;white-space:pre-line;">
+            ${sub.transcript ? `<div style="margin-bottom:8px;"><strong>📝 Transcript:</strong>\n${escapeHtml(sub.transcript)}</div>` : ""}
+            ${sub.aiEvaluation ? `<div><strong>✨ AI Assessment:</strong>\n${escapeHtml(sub.aiEvaluation)}</div>` : ""}
+          </div>`
+        : "";
+
+    const aiBtnHtml =
+      skill === "writing"
+        ? `<button type="button" class="btn btn-outline btn-sm" id="ai-wrt-btn-${escapeHtml(sub.docId)}" data-action="ai-eval-writing" data-doc-id="${escapeHtml(sub.docId)}">✨ AI Grade Writing</button>`
+        : skill === "speaking"
+          ? `<button type="button" class="btn btn-outline btn-sm" id="ai-spk-btn-${escapeHtml(sub.docId)}" data-action="ai-eval-speaking" data-doc-id="${escapeHtml(sub.docId)}">✨ AI Grade Speaking</button>`
+          : "";
+
+    const bandSelectOptions = ["4.0", "4.5", "5.0", "5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0"]
+      .map(
+        (b) =>
+          `<option value="${b}" ${String(sub.bandScore ?? "") === b ? "selected" : ""}>Band ${b}</option>`
+      )
+      .join("");
+
+    const bandInputHtml = noBandRequired
+      ? ""
+      : `<select id="band-${escapeHtml(sub.docId)}" style="width:125px;">
+           <option value="">-- Band --</option>
+           ${bandSelectOptions}
+         </select>`;
+
+    return `
+      <div class="hw-item" style="flex-direction:column;align-items:stretch;gap:12px;${isAlreadyGraded ? "opacity:0.88;" : ""}" id="grade-card-${escapeHtml(sub.docId)}">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+          <div>
+            <span class="role-pill">${escapeHtml(skill.toUpperCase())}</span>
+            <strong>${escapeHtml(sName)} (${escapeHtml(sub.studentId)})</strong>
+            <span class="muted" style="margin-left:6px;">• ${escapeHtml(hwTitle)}</span>
+            ${sub.isLate ? `<span class="badge badge-red" style="margin-left:6px;">Late</span>` : ""}
+            ${isAlreadyGraded ? `<span class="badge badge-green" style="margin-left:6px;">Verified</span>` : ""}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            ${aiBtnHtml}
+            <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" data-action="delete-submission" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}">Delete</button>
+          </div>
+        </div>
+
+        ${contentHtml}
+        ${aiBoxHtml}
+
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
+          ${bandInputHtml}
+          <input type="text" id="fb-${escapeHtml(sub.docId)}" value="${escapeHtml(sub.teacherFeedback || "")}" placeholder="Teacher feedback / notes..." style="flex:1;min-width:200px;" />
+          <button type="button" class="btn btn-primary btn-sm" data-action="save-grade" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}" data-no-band="${noBandRequired}">Verify & Save</button>
+        </div>
+      </div>
+    `;
+  };
+
+  const pendingHtml =
+    filteredPending.length === 0
+      ? `<p class="muted center" style="padding:28px 0;">🎉 No ungraded submissions in ${
+          gradingSkillFilter === "all" ? "any category" : gradingSkillFilter.toUpperCase()
+        }!</p>`
+      : `<div style="display:flex;flex-direction:column;gap:14px;">${filteredPending.map((s) => renderCard(s, false)).join("")}</div>`;
+
+  const gradedToggleHtml =
+    gradedAll.length > 0
+      ? `<div class="center" style="margin-top:20px;">
            <button type="button" class="btn btn-outline btn-sm" data-action="toggle-archived-graded">
-             ${showArchivedGraded ? "Hide Checked (1d+)" : `Show Older Checked (${hiddenCount})`}
+             ${showArchivedGraded ? "Hide Already Verified Submissions" : `Show Already Verified Submissions (${gradedAll.length})`}
            </button>
          </div>`
       : "";
 
-  if (visibleSubmissions.length === 0) {
-    container.innerHTML = toggleBarHtml + `<p class="muted center">No active submissions to review.</p>`;
-    return;
-  }
+  const gradedHtml =
+    showArchivedGraded && filteredGraded.length > 0
+      ? `<div style="margin-top:20px;border-top:1px dashed var(--border);padding-top:16px;">
+           <h4 style="margin-bottom:12px;color:var(--muted);">Already Verified</h4>
+           <div style="display:flex;flex-direction:column;gap:14px;">${filteredGraded.map((s) => renderCard(s, true)).join("")}</div>
+         </div>`
+      : "";
 
-  visibleSubmissions.sort((a, b) => (a.status === "graded") - (b.status === "graded"));
-  const studentNameMap = {};
-  students.forEach((s) => {
-    studentNameMap[s.studentId] = s.fullName;
-  });
-
-  container.innerHTML =
-    toggleBarHtml +
-    visibleSubmissions
-      .map((sub) => {
-        const isCustom = sub.assignmentId.startsWith("CUSTOMHW_") || sub.assignmentId.startsWith("PUN_");
-        const hw = isCustom ? { title: "Dynamic Task", isDrill: false } : ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
-        const title = isCustom ? `${sub.skill.toUpperCase()} Submission` : hw ? hw.title : sub.assignmentId;
-        const sName = studentNameMap[sub.studentId] || sub.studentId;
-        const noBandRequired = sub.skill === "grammar" || sub.skill === "other" || sub.isDrill || (hw && hw.isDrill);
-
-        const statusBadge =
-          sub.status === "graded"
-            ? `<span class="badge badge-green">${noBandRequired ? "Checked" : `Verified: Band ${sub.bandScore}`}</span>`
-            : `<span class="badge badge-yellow">Needs Review</span>`;
-        const lateBadge = sub.isLate ? `<span class="badge badge-red">Late</span>` : "";
-
-        let contentHtml = "";
-        const allScreenshots = Array.isArray(sub.screenshotUrls) ? sub.screenshotUrls : sub.screenshotUrl ? [sub.screenshotUrl] : [];
-        const imgHtml = allScreenshots
-          .map(
-            (url) =>
-              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Attached Work" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
-          )
-          .join("");
-
-        const allCharts = Array.isArray(sub.chartImageUrls) ? sub.chartImageUrls : sub.chartImageUrl ? [sub.chartImageUrl] : [];
-        const chartImgHtml = allCharts
-          .map(
-            (url) =>
-              `<a href="${escapeHtml(url)}" target="_blank" rel="noopener"><img src="${escapeHtml(toCloudinaryThumb(url))}" loading="lazy" alt="Task 1 Chart" style="max-height:220px;border:1px solid var(--border);border-radius:8px;margin:0 8px 8px 0;display:inline-block;" /></a>`
-          )
-          .join("");
-
-        if (sub.skill === "reading" || sub.skill === "listening") {
-          const mistakesSummary = Object.entries(sub.mistakeCounts || {})
-            .filter(([, count]) => count > 0)
-            .map(([type, count]) => `<span class="q-tag">${escapeHtml(MISTAKE_LABELS[type] || type)}: ${count} wrong</span>`)
-            .join(" ");
-          const perSetHtml =
-            Array.isArray(sub.setScores) && sub.setScores.length > 1
-              ? `<div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;">${sub.setScores
-                  .map((sc, i) => `<span class="badge badge-blue">Test ${i + 1}: ${sc}/40 (Band ${rawToIeltsBand(sc, 40)})</span>`)
-                  .join("")}</div>`
-              : "";
-          contentHtml = `
-            <div style="margin:10px 0;">
-              <p style="font-size:14px;margin-bottom:8px;"><strong>Reported Score:</strong> ${sub.rawScore} / ${sub.totalQuestions} ${sub.bandScore ? `(Avg Band ${sub.bandScore})` : `(Drill — Weakest Areas Only)`}</p>
-              ${perSetHtml}
-              ${mistakesSummary ? `<div style="margin-bottom:10px;">${mistakesSummary}</div>` : ""}
-              <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
-            </div>`;
-        } else if (sub.skill === "writing") {
-          const savedWritingAiHtml = sub.aiEvaluation
-            ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
-                 <strong style="color:var(--primary);">🎯 IELTS Writing Evaluation:</strong>
-                 <div style="margin-top:4px;white-space:pre-line;line-height:1.55;">${escapeHtml(sub.aiEvaluation)}</div>
-               </div>`
-            : "";
-
-          contentHtml = `
-            <div style="display:flex;flex-wrap:wrap;margin:10px 0;">${chartImgHtml}</div>
-            <div class="essay-preview">${escapeHtml(sub.essayText || "")}</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
-              <button type="button" class="btn btn-outline btn-sm" id="ai-wrt-btn-${escapeHtml(sub.docId)}" data-action="ai-eval-writing" data-doc-id="${escapeHtml(sub.docId)}">
-                ${sub.aiEvaluation ? "🔄 Re-run AI Writing Check" : "✨ Evaluate Writing (Gemini)"}
-              </button>
-              <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;color:var(--muted);" data-action="set-gemini-key">🔑 Set API Key</button>
-            </div>
-            ${savedWritingAiHtml}`;
-        } else if (sub.skill === "speaking") {
-          const allAudios = Array.isArray(sub.audioUrls) && sub.audioUrls.length > 0 ? sub.audioUrls : sub.audioUrl ? [sub.audioUrl] : [];
-          const audioPlayersHtml = allAudios
-            .map(
-              (url, idx) => `
-            <div style="margin-bottom:8px;">
-              ${allAudios.length > 1 ? `<div style="font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px;">Recording ${idx + 1} of ${allAudios.length}</div>` : ""}
-              <audio controls src="${escapeHtml(url)}" style="width:100%;"></audio>
-            </div>`
-            )
-            .join("");
-
-          const savedAiHtml =
-            sub.transcript || sub.aiEvaluation
-              ? `<div style="margin-top:10px;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;">
-                   ${sub.transcript ? `<div style="margin-bottom:10px;"><strong style="color:var(--primary);">📝 Verbatim Transcript:</strong><p style="margin:4px 0 0;white-space:pre-line;line-height:1.5;">${escapeHtml(sub.transcript)}</p></div>` : ""}
-                   ${sub.aiEvaluation ? `<div><strong style="color:var(--primary);">🎯 IELTS Speaking Evaluation:</strong><div style="margin-top:4px;white-space:pre-line;line-height:1.55;">${escapeHtml(sub.aiEvaluation)}</div></div>` : ""}
-                 </div>`
-              : "";
-
-          contentHtml = `
-            <div style="margin:12px 0;">
-              ${audioPlayersHtml}
-              <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <button type="button" class="btn btn-outline btn-sm" id="ai-spk-btn-${escapeHtml(sub.docId)}" data-action="ai-eval-speaking" data-doc-id="${escapeHtml(sub.docId)}">
-                  ${sub.aiEvaluation ? "🔄 Re-run AI Transcribe & Evaluate" : "✨ Transcribe & Evaluate (Gemini)"}
-                </button>
-                <button type="button" class="btn btn-outline btn-sm" style="font-size:11px;color:var(--muted);" data-action="set-gemini-key">🔑 Set API Key</button>
-              </div>
-              ${savedAiHtml}
-            </div>`;
-        } else if (sub.skill === "grammar") {
-          contentHtml = `
-            <div style="margin:10px 0;">
-              ${sub.notes ? `<p style="font-size:14px;margin-bottom:8px;"><strong>Student Note:</strong> ${escapeHtml(sub.notes)}</p>` : ""}
-              <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
-            </div>`;
-        } else {
-          contentHtml = `
-            <div style="margin:10px 0;">
-              <p style="font-size:14px;white-space:pre-line;margin-bottom:8px;">${escapeHtml(sub.notes || sub.responseText || "")}</p>
-              <div style="display:flex;flex-wrap:wrap;">${imgHtml}</div>
-            </div>`;
-        }
-
-        const hasMultiSet = Array.isArray(sub.setScores) && sub.setScores.length > 1;
-        const computedBand =
-          sub.bandScore != null
-            ? Number(sub.bandScore).toFixed(1)
-            : (sub.skill === "reading" || sub.skill === "listening") && sub.rawScore != null && sub.totalQuestions
-              ? rawToIeltsBand(sub.rawScore, sub.totalQuestions).toFixed(1)
-              : "6.0";
-
-        const bandOptions = ["4.0", "4.5", "5.0", "5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0"];
-        let bandSelectorHtml = "";
-        if (noBandRequired) {
-          bandSelectorHtml = `<div><label>Status</label><input type="text" value="Completion Check" disabled style="background:#f1f5f9;color:var(--muted);" /><input type="hidden" id="band-${escapeHtml(sub.docId)}" value="" /></div>`;
-        } else if (hasMultiSet) {
-          const multiDropdowns = sub.setScores
-            .map((sc, i) => {
-              const defaultSetBand =
-                Array.isArray(sub.setBands) && sub.setBands[i] != null
-                  ? Number(sub.setBands[i]).toFixed(1)
-                  : rawToIeltsBand(sc, 40).toFixed(1);
-              return `
-              <div style="min-width:110px;">
-                <label>Test ${i + 1} Band</label>
-                <select class="set-band-select-${escapeHtml(sub.docId)}">${bandOptions.map((b) => `<option value="${b}" ${defaultSetBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select>
-              </div>`;
-            })
-            .join("");
-          bandSelectorHtml = `<div style="display:flex;gap:8px;flex-wrap:wrap;">${multiDropdowns}<input type="hidden" id="band-${escapeHtml(sub.docId)}" value="${computedBand}" /></div>`;
-        } else {
-          bandSelectorHtml = `<div><label>Confirm / Set Band</label><select id="band-${escapeHtml(sub.docId)}">${bandOptions.map((b) => `<option value="${b}" ${computedBand === b ? "selected" : ""}>Band ${b}</option>`).join("")}</select></div>`;
-        }
-
-        return `
-        <div class="grade-card">
-          <div class="card-header-flex" style="margin-bottom:6px;">
-            <div><span class="role-pill" style="margin-right:6px;">${escapeHtml(sub.skill.toUpperCase())}</span><strong>${escapeHtml(sName)} (${escapeHtml(sub.studentId)})</strong> — ${escapeHtml(title)}</div>
-            <div style="display:flex;gap:6px;">${lateBadge}${statusBadge}</div>
-          </div>
-          ${contentHtml}
-          <div class="grade-controls-row">
-            ${bandSelectorHtml}
-            <div><label>Teacher Feedback</label><input type="text" id="fb-${escapeHtml(sub.docId)}" placeholder="Leave a comment or feedback..." value="${escapeHtml(sub.teacherFeedback || "")}" /></div>
-            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
-              <button type="button" class="btn btn-primary" data-action="save-grade" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId)}" data-no-band="${noBandRequired}">Save & Verify</button>
-              <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" data-action="quick-punish" data-student-id="${escapeHtml(sub.studentId)}" data-skill="${escapeHtml(sub.skill)}">⚡ Assign Punishment</button>
-              <button type="button" class="btn btn-outline" style="color:var(--danger);border-color:#fecaca;" data-action="delete-submission" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId)}">🗑️ Delete</button>
-            </div>
-          </div>
-        </div>`;
-      })
-      .join("");
+  container.innerHTML = subNavHtml + pendingHtml + gradedToggleHtml + gradedHtml;
 }
 
 async function saveTeacherGrade(docId, assignmentId, noBandRequired = false) {
@@ -1186,7 +1213,7 @@ Return valid JSON with three fields:
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (0 if none).`;
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1245,7 +1272,7 @@ Return valid JSON with three fields:
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (0 if none).`;
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
