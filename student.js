@@ -182,15 +182,13 @@ async function handleUrlCheckInToken() {
   }
 }
 
-async function initStudentData() {
-  const [usersSnap, progSnap, subsSnap, mocksSnap, annSnap, hwSnap, punSnap] = await Promise.all([
+let statsDataLoaded = false;
+
+async function ensureStudentStatsDataLoaded(force = false) {
+  if (statsDataLoaded && !force) return;
+  const [usersSnap, mocksSnap] = await Promise.all([
     getDocs(collection(db, "users")),
-    getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", store.currentStudentId))),
-    getDocs(query(collection(db, "submissions"), where("studentId", "==", store.currentStudentId))),
-    getDocs(collection(db, "mockScores")),
-    getDocs(collection(db, "announcements")),
-    getDocs(query(collection(db, "customAssignments"), where("studentId", "in", [store.currentStudentId, "ALL"]))),
-    getDocs(query(collection(db, "punishments"), where("studentId", "==", store.currentStudentId)))
+    getDocs(collection(db, "mockScores"))
   ]);
 
   const groupUsers = [];
@@ -199,13 +197,34 @@ async function initStudentData() {
   });
   store.allGroupUsers = groupUsers;
 
-  const me = groupUsers.find((u) => u.studentId === store.currentStudentId);
-  store.currentStudentProfile = me || {
-    studentId: store.currentStudentId,
-    fullName: store.currentStudentId,
-    ankiStats: {},
-    permanentMistakes: {}
-  };
+  const groupMocks = [];
+  mocksSnap.forEach((d) => groupMocks.push(d.data()));
+  groupMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  store.allGroupMocks = groupMocks;
+  store.studentMocksList = groupMocks.filter((m) => m.studentId === store.currentStudentId);
+  statsDataLoaded = true;
+}
+
+async function initStudentData() {
+  statsDataLoaded = false;
+  const [meSnap, progSnap, subsSnap, myMocksSnap, annSnap, hwSnap, punSnap] = await Promise.all([
+    getDoc(doc(db, "users", store.currentStudentId)),
+    getDocs(query(collection(db, "ankiProgress"), where("studentId", "==", store.currentStudentId))),
+    getDocs(query(collection(db, "submissions"), where("studentId", "==", store.currentStudentId))),
+    getDocs(query(collection(db, "mockScores"), where("studentId", "==", store.currentStudentId))),
+    getDocs(collection(db, "announcements")),
+    getDocs(query(collection(db, "customAssignments"), where("studentId", "in", [store.currentStudentId, "ALL"]))),
+    getDocs(query(collection(db, "punishments"), where("studentId", "==", store.currentStudentId)))
+  ]);
+
+  store.currentStudentProfile = meSnap.exists()
+    ? meSnap.data()
+    : { studentId: store.currentStudentId, fullName: store.currentStudentId, ankiStats: {}, permanentMistakes: {} };
+
+  const myMocks = [];
+  myMocksSnap.forEach((d) => myMocks.push(d.data()));
+  myMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
+  store.studentMocksList = myMocks;
 
   document.getElementById("user-display-name").textContent = store.currentStudentProfile.fullName;
   document.getElementById("welcome-student-name").textContent = store.currentStudentProfile.fullName;
@@ -948,11 +967,12 @@ function renderResourcesList(cat) {
     .join("");
 }
 
-export function renderStatisticsPage() {
+export async function renderStatisticsPage() {
+  await ensureStudentStatsDataLoaded();
   const subsArr = Object.values(store.studentSubmissionsMap);
 
-  studentChartInstance = buildScoreChart("student-score-chart", subsArr, store.studentMocksList, studentChartInstance);
-  groupCompareChartInstance = buildGroupCompareChart(
+  studentChartInstance = await buildScoreChart("student-score-chart", subsArr, store.studentMocksList, studentChartInstance);
+  groupCompareChartInstance = await buildGroupCompareChart(
     "group-compare-chart",
     store.studentMocksList,
     store.allGroupMocks,
