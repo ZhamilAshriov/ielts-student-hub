@@ -1,5 +1,8 @@
 import { store } from "./store.js";
+import { loadExternalScript } from "./utils.js";
 import { ASSIGNMENTS } from "./assignments-data.js";
+
+const CHART_JS_CDN = "https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js";
 
 export const MISTAKE_LABELS = {
   MCQ: "Reading: Multiple Choice",
@@ -55,9 +58,12 @@ export function calcOverallIelts(l, r, w, s) {
   return Math.round(avg * 2) / 2;
 }
 
-export function buildScoreChart(canvasId, submissions, mocks, existingChart) {
+export async function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || typeof Chart === "undefined") return existingChart;
+  if (!canvas) return existingChart;
+  if (typeof Chart === "undefined") {
+    await loadExternalScript(CHART_JS_CDN);
+  }
   if (existingChart) existingChart.destroy();
 
   const events = [];
@@ -152,9 +158,12 @@ export function buildScoreChart(canvasId, submissions, mocks, existingChart) {
   });
 }
 
-export function buildGroupCompareChart(canvasId, myMocks, groupMocks, existingChart) {
+export async function buildGroupCompareChart(canvasId, myMocks, groupMocks, existingChart) {
   const canvas = document.getElementById(canvasId);
-  if (!canvas || typeof Chart === "undefined") return existingChart;
+  if (!canvas) return existingChart;
+  if (typeof Chart === "undefined") {
+    await loadExternalScript(CHART_JS_CDN);
+  }
   if (existingChart) existingChart.destroy();
 
   const latestByStudent = {};
