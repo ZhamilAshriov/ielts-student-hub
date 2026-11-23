@@ -25,6 +25,11 @@ export const db = initializeFirestore(app, {
   localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
 });
 
-// Secondary app for teacher account creation without logging out admin
-export const secondaryApp = initializeApp(firebaseConfig, `SecondaryCreator_${Date.now()}`);
-export const secondaryAuth = getAuth(secondaryApp);
+let cachedSecondaryAuth = null;
+export function getSecondaryAuth() {
+  if (!cachedSecondaryAuth) {
+    const secondaryApp = initializeApp(firebaseConfig, `SecondaryCreator_${Date.now()}`);
+    cachedSecondaryAuth = getAuth(secondaryApp);
+  }
+  return cachedSecondaryAuth;
+}
