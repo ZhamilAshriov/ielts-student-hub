@@ -36,13 +36,19 @@ export async function uploadImagesToCloudinary(fileInputId, required = false) {
 
 export async function uploadAudioClipsToCloudinary(clips, prefix) {
   if (!Array.isArray(clips) || clips.length === 0) {
-    throw new Error("Please record your audio answer first.");
+    throw new Error("Please record your audio answer or attach audio file(s) first.");
   }
 
   const urls = [];
   for (let i = 0; i < clips.length; i++) {
+    const fileOrBlob = clips[i].blob || clips[i];
+    if (!fileOrBlob || fileOrBlob.size < 500) {
+      throw new Error(`Recording #${i + 1} is empty (0 bytes). Please re-record or upload a Voice Memo file.`);
+    }
+
+    const ext = clips[i].ext || (fileOrBlob.name ? fileOrBlob.name.split(".").pop() : "m4a");
     const formData = new FormData();
-    formData.append("file", clips[i].blob, `${prefix}_part${i + 1}_${store.currentStudentId}.webm`);
+    formData.append("file", fileOrBlob, `${prefix}_part${i + 1}_${store.currentStudentId}.${ext}`);
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
 
     const res = await fetch(
