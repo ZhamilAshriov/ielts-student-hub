@@ -56,6 +56,7 @@ let studentChartInstance = null;
 let groupCompareChartInstance = null;
 let hwViewFilter = "todo";
 let studentListenersBound = false;
+let statsDataLoaded = false;
 
 export async function initStudentModule() {
   if (!studentListenersBound) {
@@ -182,8 +183,6 @@ async function handleUrlCheckInToken() {
   }
 }
 
-let statsDataLoaded = false;
-
 async function ensureStudentStatsDataLoaded(force = false) {
   if (statsDataLoaded && !force) return;
   const [usersSnap, mocksSnap] = await Promise.all([
@@ -248,12 +247,6 @@ async function initStudentData() {
   const studentPuns = [];
   punSnap.forEach((d) => studentPuns.push(d.data()));
   store.cachedStudentPunishments = studentPuns;
-
-  const groupMocks = [];
-  mocksSnap.forEach((d) => groupMocks.push(d.data()));
-  groupMocks.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-  store.allGroupMocks = groupMocks;
-  store.studentMocksList = groupMocks.filter((m) => m.studentId === store.currentStudentId);
 
   const rawAnns = [];
   annSnap.forEach((d) => rawAnns.push({ docId: d.id, ...d.data() }));
