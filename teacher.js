@@ -14,7 +14,7 @@ import {
   where,
   serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
-import { db, secondaryAuth, LOGIN_DOMAIN } from "./firebase.js";
+import { db, getSecondaryAuth, LOGIN_DOMAIN } from "./firebase.js";
 import { store } from "./store.js";
 import {
   escapeHtml,
