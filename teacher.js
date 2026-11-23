@@ -1000,19 +1000,31 @@ export function renderTeacherGradingQueue(students, submissions) {
           ? `<button type="button" class="btn btn-outline btn-sm" id="ai-spk-btn-${escapeHtml(sub.docId)}" data-action="ai-eval-speaking" data-doc-id="${escapeHtml(sub.docId)}">✨ AI Grade Speaking</button>`
           : "";
 
-    const bandSelectOptions = ["4.0", "4.5", "5.0", "5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0"]
-      .map(
-        (b) =>
-          `<option value="${b}" ${String(sub.bandScore ?? "") === b ? "selected" : ""}>Band ${b}</option>`
-      )
-      .join("");
+    const bandList = ["4.0", "4.5", "5.0", "5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0"];
+    const buildBandOptions = (selectedVal) =>
+      bandList
+        .map((b) => `<option value="${b}" ${String(selectedVal ?? "") === b ? "selected" : ""}>Band ${b}</option>`)
+        .join("");
 
-    const bandInputHtml = noBandRequired
-      ? ""
-      : `<select id="band-${escapeHtml(sub.docId)}" style="width:125px;">
-           <option value="">-- Band --</option>
-           ${bandSelectOptions}
-         </select>`;
+    let bandInputHtml = "";
+    if (!noBandRequired) {
+      if (Array.isArray(sub.setScores) && sub.setScores.length > 1) {
+        bandInputHtml = sub.setScores
+          .map((sc, idx) => {
+            const existingSetBand = Array.isArray(sub.setBands) ? sub.setBands[idx] : "";
+            return `<select class="set-band-select-${escapeHtml(sub.docId)}" style="width:145px;" title="Test Set ${idx + 1} (${sc}/40)">
+              <option value="">Set ${idx + 1} (${sc}/40)</option>
+              ${buildBandOptions(existingSetBand)}
+            </select>`;
+          })
+          .join("");
+      } else {
+        bandInputHtml = `<select id="band-${escapeHtml(sub.docId)}" style="width:125px;">
+          <option value="">-- Band --</option>
+          ${buildBandOptions(sub.bandScore)}
+        </select>`;
+      }
+    }
 
     return `
       <div class="hw-item" style="flex-direction:column;align-items:stretch;gap:12px;${isAlreadyGraded ? "opacity:0.88;" : ""}" id="grade-card-${escapeHtml(sub.docId)}">
