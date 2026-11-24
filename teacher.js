@@ -1210,9 +1210,9 @@ async function logAiMistakesToStudent(studentId, mistakeTagCounts) {
   if (idx !== -1) store.cachedStudents[idx].permanentMistakes = currentMistakes;
 }
 async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
-  const models = ["gemini-3.8-flash", "gemini-3.8-flash-lite"];
+  const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"];
   let lastError = null;
-
+  
   for (let m = 0; m < models.length; m++) {
     const model = models[m];
     if (m > 0 && statusBtn) {
