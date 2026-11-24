@@ -1209,6 +1209,37 @@ async function logAiMistakesToStudent(studentId, mistakeTagCounts) {
   const idx = store.cachedStudents.findIndex((s) => s.studentId === studentId);
   if (idx !== -1) store.cachedStudents[idx].permanentMistakes = currentMistakes;
 }
+async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
+  const models = ["gemini-3.8-flash", "gemini-3.8-flash-lite"];
+  let lastError = null;
+
+  for (let m = 0; m < models.length; m++) {
+    const model = models[m];
+    if (m > 0 && statusBtn) {
+      statusBtn.textContent = "✨ Retrying on backup model...";
+    }
+
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      }
+    );
+
+    const data = await res.json();
+    if (res.ok) return data;
+
+    lastError = new Error(data.error?.message || `Gemini API error (${res.status})`);
+    // Retry on 503 (overloaded/deadline expired) or 429 (rate limit)
+    if (res.status !== 503 && res.status !== 429) {
+      throw lastError;
+    }
+  }
+
+  throw lastError;
+}
 
 async function transcribeAndEvaluateSpeaking(docId) {
   const sub = store.cachedSubmissions.find((s) => s.docId === docId);
@@ -1249,20 +1280,14 @@ Return valid JSON with three fields:
 2. "evaluation": Concise structured IELTS Speaking assessment (Estimated Overall Band, Fluency & Coherence, Lexical Resource, Grammatical Range & Accuracy, Pronunciation, and 2-3 Key Corrections & Upgrades).
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (0 if none).`;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    const geminiData = await callGeminiWithFallback(
+      apiKey,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: systemPrompt }, ...audioParts] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
-        })
-      }
+        contents: [{ parts: [{ text: systemPrompt }, ...audioParts] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+      },
+      btn
     );
-
-    const geminiData = await geminiRes.json();
-    if (!geminiRes.ok) throw new Error(geminiData.error?.message || `Gemini API error (${geminiRes.status})`);
 
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     const transcript = parsed.transcript || "(No speech detected)";
@@ -1308,20 +1333,14 @@ Return valid JSON with three fields:
 2. "evaluation": Structured IELTS Writing assessment (Estimated Overall Band, Task Achievement/Response, Coherence & Cohesion, Lexical Resource, Grammatical Range & Accuracy, and 3 Key Sentence Corrections & Band 8+ Upgrades).
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (0 if none).`;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+    const geminiData = await callGeminiWithFallback(
+      apiKey,
       {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `${systemPrompt}\n\nSTUDENT ESSAY:\n${sub.essayText}` }] }],
-          generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
-        })
-      }
+        contents: [{ parts: [{ text: `${systemPrompt}\n\nSTUDENT ESSAY:\n${sub.essayText}` }] }],
+        generationConfig: { responseMimeType: "application/json", temperature: 0.2 }
+      },
+      btn
     );
-
-    const geminiData = await geminiRes.json();
-    if (!geminiRes.ok) throw new Error(geminiData.error?.message || `Gemini API error (${geminiRes.status})`);
 
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     const aiEvaluation = parsed.evaluation || "";
