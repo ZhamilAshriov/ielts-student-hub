@@ -973,9 +973,15 @@ export async function renderStatisticsPage() {
     groupCompareChartInstance
   );
 
+  const dynamicMyMistakes = computeDynamicMistakes(subsArr, 6);
+  const myMistakeData =
+    Object.keys(dynamicMyMistakes).length > 0
+      ? dynamicMyMistakes
+      : store.currentStudentProfile.permanentMistakes || {};
+
   renderMistakeBars(
     "dash-permanent-mistakes",
-    store.currentStudentProfile.permanentMistakes || {},
+    myMistakeData,
     "No question-type mistakes logged yet.",
     "var(--danger)"
   );
