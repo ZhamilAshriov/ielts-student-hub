@@ -31,6 +31,7 @@ import {
   rawToIeltsBand,
   calcOverallIelts,
   buildScoreChart,
+  computeDynamicMistakes,
   renderMistakeBars
 } from "./charts.js";
 import {
@@ -679,7 +680,10 @@ async function inspectStudent(studentId) {
   const sMocks = store.cachedMocks.filter((m) => m.studentId === studentId);
 
   inspectorChartInstance = await buildScoreChart("inspector-score-chart", sSubs, sMocks, inspectorChartInstance);
-  renderMistakeBars("inspector-mistakes-box", student.permanentMistakes || {}, "No mistakes logged yet.");
+  const dynamicStudentMistakes = computeDynamicMistakes(sSubs, 6);
+  const inspectorMistakeData =
+    Object.keys(dynamicStudentMistakes).length > 0 ? dynamicStudentMistakes : student.permanentMistakes || {};
+  renderMistakeBars("inspector-mistakes-box", inspectorMistakeData, "No mistakes logged yet.");
   card.scrollIntoView({ behavior: "smooth" });
 }
 
