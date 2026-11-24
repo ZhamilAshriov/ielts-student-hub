@@ -125,6 +125,7 @@ export async function submitTaskSubmission({
 
   const fullSubmission = {
     assignmentId: task.id,
+    assignmentTitle: task.title || task.reason || "",
     studentId,
     skill: task.skill,
     status: "submitted",
