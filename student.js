@@ -1022,7 +1022,14 @@ export async function renderStatisticsPage() {
     fbContainer.innerHTML = feedbackItems
       .map((sub) => {
         const hw = unified.find((a) => a.id === sub.assignmentId);
-        const title = hw ? hw.title : sub.assignmentId;
+        const pun = store.cachedStudentPunishments.find((p) => p.id === sub.assignmentId);
+        const skillLabel = sub.skill ? sub.skill.charAt(0).toUpperCase() + sub.skill.slice(1) : "Task";
+        const fallbackTitle = sub.assignmentId?.startsWith("PUN_")
+          ? `Remedial ${skillLabel} Task`
+          : sub.assignmentId?.startsWith("CUSTOMHW_")
+            ? `Custom ${skillLabel} Homework`
+            : sub.assignmentId;
+        const title = sub.assignmentTitle || hw?.title || pun?.reason || fallbackTitle;
         const bandPill = sub.bandScore
           ? `<span class="badge badge-green">Band ${sub.bandScore}</span>`
           : `<span class="badge badge-green">Checked</span>`;
