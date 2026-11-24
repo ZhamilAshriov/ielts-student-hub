@@ -41,6 +41,7 @@ import {
   rawToIeltsBand,
   buildScoreChart,
   buildGroupCompareChart,
+  computeDynamicMistakes,
   renderMistakeBars
 } from "./charts.js";
 import {
