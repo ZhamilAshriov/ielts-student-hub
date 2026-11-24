@@ -247,16 +247,57 @@ export async function buildGroupCompareChart(canvasId, myMocks, groupMocks, exis
   });
 }
 
+export function computeDynamicMistakes(submissions, windowSize = 6) {
+  const sorted = [...submissions].sort((a, b) => {
+    const tA = a.submittedAt?.toMillis ? a.submittedAt.toMillis() : 0;
+    const tB = b.submittedAt?.toMillis ? b.submittedAt.toMillis() : 0;
+    return tB - tA; // newest first
+  });
+
+  const skillBuckets = { reading: [], listening: [], writing: [], speaking: [] };
+  sorted.forEach((sub) => {
+    const sk = (sub.skill || "").toLowerCase();
+    if (skillBuckets[sk] && sub.mistakeCounts && skillBuckets[sk].length < windowSize) {
+      skillBuckets[sk].push(sub);
+    }
+  });
+
+  const stats = {};
+  Object.values(skillBuckets).forEach((subs) => {
+    const half = Math.ceil(subs.length / 2);
+    subs.forEach((sub, idx) => {
+      const isRecentHalf = idx < half;
+      Object.entries(sub.mistakeCounts || {}).forEach(([type, rawVal]) => {
+        const count = typeof rawVal === "number" ? rawVal : rawVal?.wrong || 0;
+        if (!stats[type]) {
+          stats[type] = { wrong: 0, recentHalf: 0, olderHalf: 0, testsCount: subs.length };
+        }
+        stats[type].wrong += count;
+        if (isRecentHalf) stats[type].recentHalf += count;
+        else stats[type].olderHalf += count;
+      });
+    });
+  });
+
+  return stats;
+}
+
 export function renderMistakeBars(containerId, mistakesObj, emptyText, barColor = "var(--danger)") {
   const container = document.getElementById(containerId);
   if (!container) return;
 
   const allEntries = Object.entries(mistakesObj || {})
-    .map(([type, val]) => ({
-      type,
-      skill: getMistakeSkill(type),
-      wrong: typeof val === "number" ? val : val.wrong || 0
-    }))
+    .map(([type, val]) => {
+      const isObj = typeof val === "object" && val !== null;
+      return {
+        type,
+        skill: getMistakeSkill(type),
+        wrong: typeof val === "number" ? val : val?.wrong || 0,
+        recentHalf: isObj ? val.recentHalf ?? null : null,
+        olderHalf: isObj ? val.olderHalf ?? null : null,
+        testsCount: isObj ? val.testsCount ?? null : null
+      };
+    })
     .filter((item) => item.wrong > 0)
     .sort((a, b) => b.wrong - a.wrong);
 
@@ -276,6 +317,7 @@ export function renderMistakeBars(containerId, mistakesObj, emptyText, barColor 
 
   const render = () => {
     const filtered = activeSkill === "all" ? allEntries : allEntries.filter((e) => e.skill === activeSkill);
+    const totalInView = filtered.reduce((sum, e) => sum + e.wrong, 0) || 1;
     const maxWrong = Math.max(...filtered.map((e) => e.wrong), 1);
 
     const navHtml = `
@@ -297,14 +339,29 @@ export function renderMistakeBars(containerId, mistakesObj, emptyText, barColor 
         ? `<p class="muted center" style="padding:16px 0;">No ${activeSkill} mistakes logged yet.</p>`
         : filtered
             .map((item) => {
-              const pct = Math.round((item.wrong / maxWrong) * 100);
+              const pctOfMax = Math.round((item.wrong / maxWrong) * 100);
+              const sharePct = Math.round((item.wrong / totalInView) * 100);
+
+              let trendBadge = "";
+              if (item.recentHalf !== null && item.olderHalf !== null && item.testsCount >= 2) {
+                if (item.recentHalf < item.olderHalf) {
+                  trendBadge = `<span class="badge badge-green" style="font-size:10px;padding:1px 6px;margin-left:6px;">↓ Improving</span>`;
+                } else if (item.recentHalf > item.olderHalf) {
+                  trendBadge = `<span class="badge badge-red" style="font-size:10px;padding:1px 6px;margin-left:6px;">↑ Rising</span>`;
+                }
+              }
+
+              const metricLabel = item.testsCount
+                ? `${sharePct}% (${(item.wrong / item.testsCount).toFixed(1)}/test)`
+                : `${sharePct}% (${item.wrong})`;
+
               return `
                 <div class="type-bar-row">
                   <div class="type-bar-head">
-                    <span>${MISTAKE_LABELS[item.type] || item.type}</span>
-                    <span style="color:${barColor};">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
+                    <span>${MISTAKE_LABELS[item.type] || item.type}${trendBadge}</span>
+                    <span style="color:${barColor};">${metricLabel}</span>
                   </div>
-                  <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${barColor};"></div></div>
+                  <div class="progress-track"><div class="progress-fill" style="width:${pctOfMax}%;background:${barColor};"></div></div>
                 </div>
               `;
             })
