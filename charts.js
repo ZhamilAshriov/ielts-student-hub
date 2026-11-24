@@ -38,6 +38,48 @@ export const MISTAKE_LABELS = {
   S_PRONUNCIATION: "Speaking: Pronunciation & Stress"
 };
 
+const MISTAKE_SKILL_MAP = {
+  MCQ: "reading",
+  TFNG: "reading",
+  YNNG: "reading",
+  MATCHING_HEADINGS: "reading",
+  MATCHING_INFO: "reading",
+  MATCHING_FEATURES: "reading",
+  MATCHING_SENTENCE_ENDINGS: "reading",
+  SENTENCE_COMPLETION: "reading",
+  SUMMARY_COMPLETION: "reading",
+  NOTE_COMPLETION: "reading",
+  TABLE_COMPLETION: "reading",
+  FLOW_CHART_COMPLETION: "reading",
+  DIAGRAM_LABELLING: "reading",
+  SHORT_ANSWER: "reading",
+  L_MCQ: "listening",
+  MATCHING: "listening",
+  MAP_DIAGRAM: "listening",
+  FORM_NOTE_TABLE_SUMMARY: "listening",
+  L_SENTENCE_COMPLETION: "listening",
+  L_SHORT_ANSWER: "listening",
+  W_ARTICLES: "writing",
+  W_TENSE: "writing",
+  W_SVA: "writing",
+  W_PREPOSITIONS: "writing",
+  W_WORD_CHOICE: "writing",
+  W_SENTENCE_STRUCTURE: "writing",
+  W_TASK_RESPONSE: "writing",
+  S_FLUENCY_HESITATION: "speaking",
+  S_GRAMMAR_TENSE: "speaking",
+  S_LEXICAL_RANGE: "speaking",
+  S_PRONUNCIATION: "speaking"
+};
+
+function getMistakeSkill(type) {
+  if (MISTAKE_SKILL_MAP[type]) return MISTAKE_SKILL_MAP[type];
+  if (type.startsWith("L_")) return "listening";
+  if (type.startsWith("W_")) return "writing";
+  if (type.startsWith("S_")) return "speaking";
+  return "reading";
+}
+
 export function rawToIeltsBand(raw, total = 40) {
   const scaled = Math.round((raw / total) * 40);
   if (scaled >= 39) return 9.0;
@@ -209,28 +251,74 @@ export function renderMistakeBars(containerId, mistakesObj, emptyText, barColor 
   const container = document.getElementById(containerId);
   if (!container) return;
 
-  const entries = Object.entries(mistakesObj || {})
-    .map(([type, val]) => ({ type, wrong: typeof val === "number" ? val : val.wrong || 0 }))
+  const allEntries = Object.entries(mistakesObj || {})
+    .map(([type, val]) => ({
+      type,
+      skill: getMistakeSkill(type),
+      wrong: typeof val === "number" ? val : val.wrong || 0
+    }))
     .filter((item) => item.wrong > 0)
     .sort((a, b) => b.wrong - a.wrong);
 
-  if (entries.length === 0) {
+  if (allEntries.length === 0) {
     container.innerHTML = `<p class="muted">${emptyText}</p>`;
     return;
   }
-  const maxWrong = Math.max(...entries.map((e) => e.wrong), 1);
-  container.innerHTML = entries
-    .map((item) => {
-      const pct = Math.round((item.wrong / maxWrong) * 100);
-      return `
-      <div class="type-bar-row">
-        <div class="type-bar-head">
-          <span>${MISTAKE_LABELS[item.type] || item.type}</span>
-          <span style="color:${barColor};">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
-        </div>
-        <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${barColor};"></div></div>
+
+  let activeSkill = "all";
+  const tabs = [
+    { key: "all", label: "All" },
+    { key: "listening", label: "Listening" },
+    { key: "reading", label: "Reading" },
+    { key: "writing", label: "Writing" },
+    { key: "speaking", label: "Speaking" }
+  ];
+
+  const render = () => {
+    const filtered = activeSkill === "all" ? allEntries : allEntries.filter((e) => e.skill === activeSkill);
+    const maxWrong = Math.max(...filtered.map((e) => e.wrong), 1);
+
+    const navHtml = `
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border);">
+        ${tabs
+          .map((t) => {
+            const count = t.key === "all" ? allEntries.length : allEntries.filter((e) => e.skill === t.key).length;
+            const isActive = activeSkill === t.key;
+            return `<button type="button" class="btn ${isActive ? "btn-primary" : "btn-outline"} btn-sm" data-mistake-skill="${t.key}" style="padding:4px 10px;font-size:12px;">
+              ${t.label} (${count})
+            </button>`;
+          })
+          .join("")}
       </div>
     `;
-    })
-    .join("");
+
+    const barsHtml =
+      filtered.length === 0
+        ? `<p class="muted center" style="padding:16px 0;">No ${activeSkill} mistakes logged yet.</p>`
+        : filtered
+            .map((item) => {
+              const pct = Math.round((item.wrong / maxWrong) * 100);
+              return `
+                <div class="type-bar-row">
+                  <div class="type-bar-head">
+                    <span>${MISTAKE_LABELS[item.type] || item.type}</span>
+                    <span style="color:${barColor};">${item.wrong} mistake${item.wrong > 1 ? "s" : ""}</span>
+                  </div>
+                  <div class="progress-track"><div class="progress-fill" style="width:${pct}%;background:${barColor};"></div></div>
+                </div>
+              `;
+            })
+            .join("");
+
+    container.innerHTML = navHtml + barsHtml;
+  };
+
+  container.onclick = (e) => {
+    const btn = e.target.closest("[data-mistake-skill]");
+    if (!btn) return;
+    activeSkill = btn.dataset.mistakeSkill;
+    render();
+  };
+
+  render();
 }
