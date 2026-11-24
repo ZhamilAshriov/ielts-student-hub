@@ -1250,7 +1250,7 @@ Return valid JSON with three fields:
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (0 if none).`;
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1309,7 +1309,7 @@ Return valid JSON with three fields:
 3. "mistakeCounts": Object counting recurring error categories using ONLY keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (0 if none).`;
 
     const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
