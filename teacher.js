@@ -1004,11 +1004,12 @@ export function renderTeacherGradingQueue(students, submissions) {
         ${imgHtml ? `<div style="margin-top:8px;">${imgHtml}</div>` : ""}`;
     }
 
+    const formattedEval = formatAiEvaluation(sub.aiEvaluation);
     const aiBoxHtml =
-      sub.transcript || sub.aiEvaluation
+      sub.transcript || formattedEval
         ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;white-space:pre-line;">
             ${sub.transcript ? `<div style="margin-bottom:8px;"><strong>📝 Transcript:</strong>\n${escapeHtml(sub.transcript)}</div>` : ""}
-            ${sub.aiEvaluation ? `<div><strong>✨ AI Assessment:</strong>\n${escapeHtml(sub.aiEvaluation)}</div>` : ""}
+            ${formattedEval ? `<div><strong>✨ AI Assessment:</strong>\n${escapeHtml(formattedEval)}</div>` : ""}
           </div>`
         : "";
 
@@ -1267,14 +1268,35 @@ async function logAiMistakesToStudent(studentId, mistakeTagCounts) {
   const idx = store.cachedStudents.findIndex((s) => s.studentId === studentId);
   if (idx !== -1) store.cachedStudents[idx].permanentMistakes = currentMistakes;
 }
+function formatAiEvaluation(rawEval) {
+  if (!rawEval) return "";
+  if (typeof rawEval === "string") return rawEval;
+  if (typeof rawEval === "object") {
+    return Object.entries(rawEval)
+      .map(([k, v]) => {
+        const label = k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
+        const valStr = Array.isArray(v) ? v.join("\n• ") : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
+        return `${label}: ${valStr}`;
+      })
+      .join("\n");
+  }
+  return String(rawEval);
+}
+
 async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
-  const models = ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"];
+  const attempts = [
+    { model: "gemini-3.8-flash", delayMs: 0 },
+    { model: "gemini-3.8-flash", delayMs: 2500 },
+    { model: "gemini-2.5-flash", delayMs: 1000 },
+    { model: "gemini-2.0-flash", delayMs: 1000 }
+  ];
   let lastError = null;
-  
-  for (let m = 0; m < models.length; m++) {
-    const model = models[m];
-    if (m > 0 && statusBtn) {
-      statusBtn.textContent = "✨ Retrying on backup model...";
+
+  for (let i = 0; i < attempts.length; i++) {
+    const { model, delayMs } = attempts[i];
+    if (delayMs > 0) {
+      if (statusBtn) statusBtn.textContent = `✨ Server busy, retrying (${i + 1}/${attempts.length})...`;
+      await new Promise((r) => setTimeout(r, delayMs));
     }
 
     const res = await fetch(
@@ -1290,8 +1312,7 @@ async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
     if (res.ok) return data;
 
     lastError = new Error(data.error?.message || `Gemini API error (${res.status})`);
-    // Retry on 503 (overloaded/deadline expired) or 429 (rate limit)
-    if (res.status !== 503 && res.status !== 429) {
+    if (res.status !== 503 && res.status !== 429 && res.status !== 404) {
       throw lastError;
     }
   }
@@ -1349,7 +1370,7 @@ Return valid JSON with three fields:
 
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     const transcript = parsed.transcript || "(No speech detected)";
-    const aiEvaluation = parsed.evaluation || "";
+    const aiEvaluation = formatAiEvaluation(parsed.evaluation);
     const mistakeCounts = parsed.mistakeCounts || {};
 
     await updateDoc(doc(db, "submissions", docId), { transcript, aiEvaluation, mistakeCounts, aiMistakesLogged: true });
@@ -1403,7 +1424,7 @@ Return valid JSON with three fields:
     );
 
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
-    const aiEvaluation = parsed.evaluation || "";
+    const aiEvaluation = formatAiEvaluation(parsed.evaluation);
     const estimatedBand = parsed.estimatedBand || "";
     const mistakeCounts = parsed.mistakeCounts || {};
 
