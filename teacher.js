@@ -129,8 +129,9 @@ function bindTeacherDelegatedClicks() {
       quickAssignPunishment(btn.dataset.studentId, btn.dataset.skill);
     } else if (action === "save-grade") {
       await saveTeacherGrade(btn.dataset.docId, btn.dataset.assignmentId, btn.dataset.noBand === "true");
+    } else if (action === "unverify-grade") {
+      await unverifyTeacherGrade(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "delete-submission") {
-      await deleteSubmission(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "ai-eval-writing") {
       await evaluateWritingSubmission(btn.dataset.docId);
     } else if (action === "ai-eval-speaking") {
@@ -1073,7 +1074,12 @@ export function renderTeacherGradingQueue(students, submissions) {
         <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;">
           ${bandInputHtml}
           <input type="text" id="fb-${escapeHtml(sub.docId)}" value="${escapeHtml(sub.teacherFeedback || "")}" placeholder="Teacher feedback / notes..." style="flex:1;min-width:200px;" />
-          <button type="button" class="btn btn-primary btn-sm" data-action="save-grade" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}" data-no-band="${noBandRequired}">Verify & Save</button>
+          ${
+            isAlreadyGraded
+              ? `<button type="button" class="btn btn-outline btn-sm" style="color:#b45309;border-color:#fde68a;background:#fffbeb;" data-action="unverify-grade" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}">↩ Call Back</button>`
+              : ""
+          }
+          <button type="button" class="btn btn-primary btn-sm" data-action="save-grade" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}" data-no-band="${noBandRequired}">${isAlreadyGraded ? "Update Grade" : "Verify & Save"}</button>
         </div>
       </div>
     `;
@@ -1107,21 +1113,41 @@ export function renderTeacherGradingQueue(students, submissions) {
 }
 
 async function saveTeacherGrade(docId, assignmentId, noBandRequired = false) {
+  const sub = store.cachedSubmissions.find((s) => s.docId === docId);
+  const student = store.cachedStudents.find((s) => s.studentId === sub?.studentId);
+  const studentLabel = student ? `${student.fullName} (${student.studentId})` : sub?.studentId || "Student";
+
   const setSelects = Array.from(document.querySelectorAll(`.set-band-select-${docId}`));
   const rawBand = document.getElementById(`band-${docId}`)?.value;
   const fbVal = document.getElementById(`fb-${docId}`)?.value.trim() || "";
   const updatePayload = { teacherFeedback: fbVal, status: "graded", gradedAt: serverTimestamp() };
 
+  let bandSummary = "Checked (No Band)";
   if (!noBandRequired) {
     if (setSelects.length > 0) {
+      if (setSelects.some((sel) => !sel.value)) {
+        return notify("Please select a band for every test set before verifying.", "warning");
+      }
       const setBands = setSelects.map((sel) => Number(sel.value));
       const avg = setBands.reduce((sum, b) => sum + b, 0) / setBands.length;
       updatePayload.setBands = setBands;
       updatePayload.bandScore = Math.round(avg * 2) / 2;
-    } else if (rawBand) {
+      bandSummary = `Sets: ${setBands.map((b) => `Band ${b.toFixed(1)}`).join(", ")} (Avg: Band ${updatePayload.bandScore.toFixed(1)})`;
+    } else {
+      if (!rawBand) {
+        return notify("Please select a Band score before verifying.", "warning");
+      }
       updatePayload.bandScore = Number(rawBand);
+      bandSummary = `Band ${updatePayload.bandScore.toFixed(1)}`;
     }
   }
+
+  const confirmMsg =
+    `Confirm verification for ${studentLabel}?\n\n` +
+    `• Result: ${bandSummary}\n` +
+    `• Feedback: ${fbVal ? `"${fbVal}"` : "(No written note)"}`;
+
+  if (!confirm(confirmMsg)) return;
 
   await updateDoc(doc(db, "submissions", docId), updatePayload);
   if (assignmentId && assignmentId.startsWith("PUN_")) {
@@ -1139,6 +1165,37 @@ async function saveTeacherGrade(docId, assignmentId, noBandRequired = false) {
   }
 
   notify("Verified & feedback saved!", "success");
+  renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
+}
+
+async function unverifyTeacherGrade(docId, assignmentId) {
+  const sub = store.cachedSubmissions.find((s) => s.docId === docId);
+  const student = store.cachedStudents.find((s) => s.studentId === sub?.studentId);
+  const studentLabel = student ? `${student.fullName} (${student.studentId})` : sub?.studentId || "Student";
+
+  if (!confirm(`Call back verification for ${studentLabel}?\n\nThis will move the submission back to your ungraded Grading Queue.`)) {
+    return;
+  }
+
+  await updateDoc(doc(db, "submissions", docId), {
+    status: "submitted",
+    gradedAt: null
+  });
+
+  if (assignmentId && assignmentId.startsWith("PUN_")) {
+    await updateDoc(doc(db, "punishments", assignmentId), { status: "submitted" }).catch(() => {});
+    const punIdx = store.cachedTeacherPunishments.findIndex((p) => p.id === assignmentId);
+    if (punIdx !== -1) store.cachedTeacherPunishments[punIdx].status = "submitted";
+    renderTeacherPunishments(store.cachedTeacherPunishments, store.cachedStudents);
+  }
+
+  const subIdx = store.cachedSubmissions.findIndex((s) => s.docId === docId);
+  if (subIdx !== -1) {
+    store.cachedSubmissions[subIdx].status = "submitted";
+    store.cachedSubmissions[subIdx].gradedAt = null;
+  }
+
+  notify("Submission called back to Grading Queue!", "info");
   renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
 }
 
