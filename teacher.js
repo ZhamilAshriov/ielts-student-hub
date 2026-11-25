@@ -1271,12 +1271,34 @@ async function logAiMistakesToStudent(studentId, mistakeTagCounts) {
 function formatAiEvaluation(rawEval) {
   if (!rawEval) return "";
   if (typeof rawEval === "string") return rawEval;
+  if (Array.isArray(rawEval)) {
+    return rawEval
+      .map((item) => {
+        if (typeof item === "string") return `• ${item}`;
+        if (typeof item === "object" && item !== null) {
+          const orig = item.original || item.sentence || item.before || "";
+          const fixed = item.corrected || item.upgrade || item.improved || item.after || "";
+          const note = item.explanation || item.reason || item.note || "";
+          if (orig && fixed) {
+            return `• "${orig}" → "${fixed}"${note ? ` (${note})` : ""}`;
+          }
+          return (
+            "• " +
+            Object.entries(item)
+              .map(([k, v]) => `${k.replace(/([A-Z])/g, " $1").trim()}: ${formatAiEvaluation(v)}`)
+              .join(" | ")
+          );
+        }
+        return `• ${String(item)}`;
+      })
+      .join("\n");
+  }
   if (typeof rawEval === "object") {
     return Object.entries(rawEval)
       .map(([k, v]) => {
         const label = k.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase()).trim();
-        const valStr = Array.isArray(v) ? v.join("\n• ") : typeof v === "object" && v !== null ? JSON.stringify(v) : String(v);
-        return `${label}: ${valStr}`;
+        const formattedVal = formatAiEvaluation(v);
+        return Array.isArray(v) ? `${label}:\n${formattedVal}` : `${label}: ${formattedVal}`;
       })
       .join("\n");
   }
