@@ -132,6 +132,7 @@ function bindTeacherDelegatedClicks() {
     } else if (action === "unverify-grade") {
       await unverifyTeacherGrade(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "delete-submission") {
+      await deleteSubmission(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "ai-eval-writing") {
       await evaluateWritingSubmission(btn.dataset.docId);
     } else if (action === "ai-eval-speaking") {
@@ -1349,8 +1350,9 @@ Return valid JSON with three fields:
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     const transcript = parsed.transcript || "(No speech detected)";
     const aiEvaluation = parsed.evaluation || "";
+    const mistakeCounts = parsed.mistakeCounts || {};
 
-    await updateDoc(doc(db, "submissions", docId), { transcript, aiEvaluation, aiMistakesLogged: true });
+    await updateDoc(doc(db, "submissions", docId), { transcript, aiEvaluation, mistakeCounts, aiMistakesLogged: true });
     if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
       await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
     }
@@ -1359,6 +1361,7 @@ Return valid JSON with three fields:
     if (subIdx !== -1) {
       store.cachedSubmissions[subIdx].transcript = transcript;
       store.cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      store.cachedSubmissions[subIdx].mistakeCounts = mistakeCounts;
       store.cachedSubmissions[subIdx].aiMistakesLogged = true;
     }
 
@@ -1402,8 +1405,9 @@ Return valid JSON with three fields:
     const parsed = JSON.parse(geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}");
     const aiEvaluation = parsed.evaluation || "";
     const estimatedBand = parsed.estimatedBand || "";
+    const mistakeCounts = parsed.mistakeCounts || {};
 
-    await updateDoc(doc(db, "submissions", docId), { aiEvaluation, aiMistakesLogged: true });
+    await updateDoc(doc(db, "submissions", docId), { aiEvaluation, mistakeCounts, aiMistakesLogged: true });
     if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
       await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
     }
@@ -1411,6 +1415,7 @@ Return valid JSON with three fields:
     const subIdx = store.cachedSubmissions.findIndex((s) => s.docId === docId);
     if (subIdx !== -1) {
       store.cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      store.cachedSubmissions[subIdx].mistakeCounts = mistakeCounts;
       store.cachedSubmissions[subIdx].aiMistakesLogged = true;
     }
 
