@@ -10,24 +10,45 @@ import { escapeHtml } from "./utils.js";
 
 export const ANNOUNCEMENT_EMOJIS = ["👍", "❤️", "🔥", "🎉", "👏", "😢", "😡"];
 
+function getOrdinalLabel(n) {
+  if (n === 1) return "1st";
+  if (n === 2) return "2nd";
+  if (n === 3) return "3rd";
+  return `${n}th`;
+}
+
 export function sortAnnouncementsList(list) {
   return [...list].sort((a, b) => {
     if (Boolean(b.pinned) !== Boolean(a.pinned)) return b.pinned ? 1 : -1;
-    const tA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAtMs || 0);
-    const tB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAtMs || 0);
+    const tA = a.updatedAtMs || (a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAtMs || 0));
+    const tB = b.updatedAtMs || (b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAtMs || 0));
     return tB - tA;
   });
 }
 
 export function formatAnnouncementDate(ann) {
-  if (ann.createdAt?.toDate) {
-    return ann.createdAt.toDate().toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric"
-    });
+  const released =
+    ann.dateLabel ||
+    (ann.createdAt?.toDate
+      ? ann.createdAt.toDate().toLocaleString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit"
+        })
+      : "Recent");
+
+  const history = Array.isArray(ann.updateHistory) ? ann.updateHistory : [];
+  if (history.length === 0) {
+    return `Released: ${released}`;
   }
-  return ann.dateLabel || "Recent";
+
+  const updatesText = history
+    .map((stamp, idx) => `${getOrdinalLabel(idx + 1)} Updated: ${stamp}`)
+    .join(" • ");
+
+  return `Released: ${released} • ${updatesText}`;
 }
 
 export function getAnnouncementBadgeClass(tag) {
@@ -92,33 +113,42 @@ export function renderStudentAnnouncements(list) {
     container.innerHTML = `<p class="muted" style="margin-bottom:0;">No announcements from your teacher yet.</p>`;
     return;
   }
-  container.innerHTML = list.map((ann) => `
-    <div class="hw-item" style="flex-direction:column;align-items:stretch;${ann.pinned ? "border-left:4px solid var(--primary);background:#f8fafc;" : ""}">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
-        <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
-        <strong>${escapeHtml(ann.title)}</strong>
-        <span class="muted" style="font-size:12px;margin-left:auto;margin-bottom:0;">${formatAnnouncementDate(ann)}</span>
+  container.innerHTML = list.map((ann) => {
+    const revCount = Array.isArray(ann.updateHistory) ? ann.updateHistory.length : 0;
+    return `
+      <div class="hw-item" style="flex-direction:column;align-items:stretch;${ann.pinned ? "border-left:4px solid var(--primary);background:#f8fafc;" : ""}">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
+          <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
+          ${revCount > 0 ? `<span class="badge badge-blue">Updated (${revCount}x)</span>` : ""}
+          <strong>${escapeHtml(ann.title)}</strong>
+        </div>
+        <div class="muted" style="font-size:12px;margin-top:4px;">${escapeHtml(formatAnnouncementDate(ann))}</div>
+        <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</p>
+        ${buildAnnouncementReactionsHtml(ann, store.currentStudentId, false)}
       </div>
-      <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</p>
-      ${buildAnnouncementReactionsHtml(ann, store.currentStudentId, false)}
-    </div>
-  `).join("");
+    `;
+  }).join("");
 }
 
 export function checkAndShowNewAnnouncementModal(list) {
   if (!store.currentStudentId || !Array.isArray(list) || list.length === 0) return;
 
   const storageKey = `ielts_hub_seen_anns_${store.currentStudentId}`;
-  let seenIds = [];
+  let seenTokens = [];
   try {
-    seenIds = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    seenTokens = JSON.parse(localStorage.getItem(storageKey) || "[]");
   } catch {
-    seenIds = [];
+    seenTokens = [];
   }
 
-  const seenSet = new Set(seenIds);
-  const unseenAnns = list.filter((ann) => !seenSet.has(ann.docId));
+  const getVersionToken = (ann) => {
+    const revCount = Array.isArray(ann.updateHistory) ? ann.updateHistory.length : 0;
+    return `${ann.docId}_v${revCount}`;
+  };
+
+  const seenSet = new Set(seenTokens);
+  const unseenAnns = list.filter((ann) => !seenSet.has(getVersionToken(ann)));
   if (unseenAnns.length === 0) return;
 
   document.getElementById("new-ann-popup-overlay")?.remove();
@@ -131,24 +161,28 @@ export function checkAndShowNewAnnouncementModal(list) {
     padding: 16px; z-index: 9999; backdrop-filter: blur(2px);
   `;
 
-  const cardsHtml = unseenAnns.map((ann) => `
-    <div style="background:#f8fafc;border:1px solid var(--border);${ann.pinned ? "border-left:4px solid var(--primary);" : ""}border-radius:10px;padding:14px 16px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
-        ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
-        <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
-        <span class="muted" style="font-size:12px;margin-left:auto;">${formatAnnouncementDate(ann)}</span>
+  const cardsHtml = unseenAnns.map((ann) => {
+    const revCount = Array.isArray(ann.updateHistory) ? ann.updateHistory.length : 0;
+    return `
+      <div style="background:#f8fafc;border:1px solid var(--border);${ann.pinned ? "border-left:4px solid var(--primary);" : ""}border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;">
+          ${ann.pinned ? `<span class="badge badge-yellow">📌 Pinned</span>` : ""}
+          <span class="badge ${getAnnouncementBadgeClass(ann.tag)}">${escapeHtml(ann.tag || "GENERAL")}</span>
+          ${revCount > 0 ? `<span class="badge badge-blue">Updated (${revCount}x)</span>` : ""}
+        </div>
+        <div class="muted" style="font-size:11px;margin-bottom:6px;">${escapeHtml(formatAnnouncementDate(ann))}</div>
+        <div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:6px;">${escapeHtml(ann.title)}</div>
+        <div style="font-size:14px;white-space:pre-line;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</div>
       </div>
-      <div style="font-weight:700;font-size:15px;color:var(--text);margin-bottom:6px;">${escapeHtml(ann.title)}</div>
-      <div style="font-size:14px;white-space:pre-line;color:var(--text);line-height:1.55;">${escapeHtml(ann.body)}</div>
-    </div>
-  `).join("");
+    `;
+  }).join("");
 
   overlay.innerHTML = `
     <div style="background:#ffffff;border-radius:14px;max-width:520px;width:100%;max-height:82vh;display:flex;flex-direction:column;box-shadow:0 20px 25px -5px rgba(0,0,0,0.18);overflow:hidden;">
       <div style="padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:20px;">📢</span>
-          <h3 style="margin:0;font-size:17px;">New Announcement${unseenAnns.length > 1 ? `s (${unseenAnns.length})` : ""}</h3>
+          <h3 style="margin:0;font-size:17px;">New / Updated Announcement${unseenAnns.length > 1 ? `s (${unseenAnns.length})` : ""}</h3>
         </div>
         <button type="button" id="close-ann-popup-x" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--muted);line-height:1;">✕</button>
       </div>
@@ -162,7 +196,7 @@ export function checkAndShowNewAnnouncementModal(list) {
   document.body.appendChild(overlay);
 
   const dismissModal = () => {
-    const updatedSeen = Array.from(new Set([...seenIds, ...list.map((a) => a.docId)]));
+    const updatedSeen = Array.from(new Set([...seenTokens, ...list.map(getVersionToken)]));
     localStorage.setItem(storageKey, JSON.stringify(updatedSeen));
     overlay.remove();
   };
