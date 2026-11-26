@@ -1331,23 +1331,17 @@ function formatAiEvaluation(rawEval) {
 }
 
 async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
-  const attempts = [
-    { model: "gemini-3.8-flash", delayMs: 0 },
-    { model: "gemini-3.8-flash", delayMs: 2500 },
-    { model: "gemini-2.5-flash", delayMs: 1000 },
-    { model: "gemini-2.0-flash", delayMs: 1000 }
-  ];
+  const delays = [0, 2000, 4500, 8000];
   let lastError = null;
 
-  for (let i = 0; i < attempts.length; i++) {
-    const { model, delayMs } = attempts[i];
-    if (delayMs > 0) {
-      if (statusBtn) statusBtn.textContent = `✨ Server busy, retrying (${i + 1}/${attempts.length})...`;
-      await new Promise((r) => setTimeout(r, delayMs));
+  for (let i = 0; i < delays.length; i++) {
+    if (delays[i] > 0) {
+      if (statusBtn) statusBtn.textContent = `✨ High demand, retrying (${i + 1}/${delays.length})...`;
+      await new Promise((r) => setTimeout(r, delays[i]));
     }
 
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1359,7 +1353,7 @@ async function callGeminiWithFallback(apiKey, payload, statusBtn = null) {
     if (res.ok) return data;
 
     lastError = new Error(data.error?.message || `Gemini API error (${res.status})`);
-    if (res.status !== 503 && res.status !== 429 && res.status !== 404) {
+    if (res.status !== 503 && res.status !== 429) {
       throw lastError;
     }
   }
