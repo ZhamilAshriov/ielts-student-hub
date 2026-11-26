@@ -1005,9 +1005,34 @@ export function renderTeacherGradingQueue(students, submissions) {
     }
 
     const formattedEval = formatAiEvaluation(sub.aiEvaluation);
+    let integrityBannerHtml = "";
+    if (sub.aiIntegrity && sub.aiIntegrity.risk) {
+      const risk = sub.aiIntegrity.risk.toUpperCase();
+      const isFlagged = risk === "HIGH" || risk === "MEDIUM";
+      const bg = risk === "HIGH" ? "#fef2f2" : risk === "MEDIUM" ? "#fffbeb" : "#f0fdf4";
+      const border = risk === "HIGH" ? "#fecaca" : risk === "MEDIUM" ? "#fde68a" : "#bbf7d0";
+      const color = risk === "HIGH" ? "#b91c1c" : risk === "MEDIUM" ? "#b45309" : "#15803d";
+      const icon = risk === "HIGH" ? "🚨" : risk === "MEDIUM" ? "⚠️" : "✅";
+      const titleText =
+        skill === "speaking"
+          ? risk === "LOW"
+            ? "Spontaneous & Natural Speech"
+            : `Memorized / Scripted Speech Risk: ${risk}`
+          : risk === "LOW"
+            ? "Authentic Student Writing"
+            : `AI / Cheating Risk: ${risk}`;
+
+      integrityBannerHtml = `
+        <div style="background:${bg};border:1px solid ${border};color:${color};border-radius:8px;padding:10px 12px;font-size:13px;margin-bottom:${sub.transcript || formattedEval ? "8px" : "0"};">
+          <strong>${icon} ${titleText}</strong>${sub.aiIntegrity.confidence ? ` <span style="opacity:0.85;">(${escapeHtml(String(sub.aiIntegrity.confidence))}% confidence)</span>` : ""}
+          ${sub.aiIntegrity.reason ? `<div style="margin-top:4px;color:var(--text);">${escapeHtml(sub.aiIntegrity.reason)}</div>` : ""}
+        </div>`;
+    }
+
     const aiBoxHtml =
-      sub.transcript || formattedEval
+      integrityBannerHtml || sub.transcript || formattedEval
         ? `<div style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;font-size:13px;white-space:pre-line;">
+            ${integrityBannerHtml}
             ${sub.transcript ? `<div style="margin-bottom:8px;"><strong>📝 Transcript:</strong>\n${escapeHtml(sub.transcript)}</div>` : ""}
             ${formattedEval ? `<div><strong>✨ AI Assessment:</strong>\n${escapeHtml(formattedEval)}</div>` : ""}
           </div>`
@@ -1374,13 +1399,18 @@ async function transcribeAndEvaluateSpeaking(docId) {
       ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
     const promptContext = taskObj?.details?.questions || taskObj?.instructions || taskObj?.title || "IELTS Speaking task";
 
-    const systemPrompt = `You are a strict, certified IELTS Speaking examiner.
+    const systemPrompt = `You are a strict, certified IELTS Speaking examiner and speech-authenticity detector.
 Listen carefully to the student's audio response for this prompt: "${promptContext}".
-Return valid JSON with three fields:
+Also analyze vocal delivery and content for memorized scripts, reading off a screen, or rehearsed template answers (e.g., flat reading intonation, unnatural pacing, reciting an unrelated memorized Part 2 story, or extreme gap between memorized C1 phrases and broken basic grammar).
+Return valid JSON with four fields:
 1. "transcript": Verbatim transcription preserving filler words (um, uh, like), pauses (...), and self-corrections.
 2. "evaluation": Concise structured IELTS Speaking assessment (Estimated Overall Band, Fluency & Coherence, Lexical Resource, Grammatical Range & Accuracy, Pronunciation, and 2-3 Key Corrections & Upgrades).
-3. "mistakeCounts": Object counting recurring error categories using ONLY keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (0 if none).`;
-
+3. "mistakeCounts": Object counting recurring error categories using ONLY keys: S_FLUENCY_HESITATION, S_GRAMMAR_TENSE, S_LEXICAL_RANGE, S_PRONUNCIATION (0 if none).
+4. "integrity": Object with:
+   - "risk": "LOW", "MEDIUM", or "HIGH"
+   - "confidence": Number from 0 to 100
+   - "reason": 1-2 concrete sentences explaining why the speech sounds spontaneous or memorized/read aloud (cite specific vocal/lexical clues).`;
+    
     const geminiData = await callGeminiWithFallback(
       apiKey,
       {
@@ -1394,8 +1424,9 @@ Return valid JSON with three fields:
     const transcript = parsed.transcript || "(No speech detected)";
     const aiEvaluation = formatAiEvaluation(parsed.evaluation);
     const mistakeCounts = parsed.mistakeCounts || {};
+    const aiIntegrity = parsed.integrity || null;
 
-    await updateDoc(doc(db, "submissions", docId), { transcript, aiEvaluation, mistakeCounts, aiMistakesLogged: true });
+    await updateDoc(doc(db, "submissions", docId), { transcript, aiEvaluation, aiIntegrity, mistakeCounts, aiMistakesLogged: true });
     if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
       await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
     }
@@ -1404,6 +1435,7 @@ Return valid JSON with three fields:
     if (subIdx !== -1) {
       store.cachedSubmissions[subIdx].transcript = transcript;
       store.cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      store.cachedSubmissions[subIdx].aiIntegrity = aiIntegrity;
       store.cachedSubmissions[subIdx].mistakeCounts = mistakeCounts;
       store.cachedSubmissions[subIdx].aiMistakesLogged = true;
     }
@@ -1428,14 +1460,28 @@ async function evaluateWritingSubmission(docId) {
       ASSIGNMENTS.find((a) => a.id === sub.assignmentId);
     const promptText = taskObj?.details?.promptText || taskObj?.promptText || taskObj?.title || "IELTS Writing Task";
 
-    const systemPrompt = `You are a strict, certified IELTS Writing examiner.
+    const pastWritingBands = store.cachedSubmissions
+      .filter((s) => s.studentId === sub.studentId && s.skill === "writing" && s.status === "graded" && s.bandScore)
+      .map((s) => `Band ${s.bandScore}`)
+      .join(", ");
+    const historyNote = pastWritingBands
+      ? `Student's previous verified Writing scores: ${pastWritingBands}.`
+      : "No prior verified Writing scores on record.";
+
+    const systemPrompt = `You are a strict, certified IELTS Writing examiner and AI-plagiarism / cheating detector.
 Grade the student's response to this prompt: "${promptText}".
 Word count: ${sub.essayText.trim().split(/\s+/).filter(Boolean).length} words.
-Return valid JSON with three fields:
+${historyNote}
+Also analyze the essay for signs of AI generation (ChatGPT/Claude), copied model essays, or memorized templates (e.g., robotic symmetry, zero human typos/article slips, generic AI cliches like "delve", "tapestry", "testament to", "crucial to note", or an implausible jump compared to their past verified bands).
+Return valid JSON with four fields:
 1. "estimatedBand": String band score like "6.0", "6.5", or "7.0".
 2. "evaluation": Structured IELTS Writing assessment (Estimated Overall Band, Task Achievement/Response, Coherence & Cohesion, Lexical Resource, Grammatical Range & Accuracy, and 3 Key Sentence Corrections & Band 8+ Upgrades).
-3. "mistakeCounts": Object counting recurring error categories using ONLY keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (0 if none).`;
-
+3. "mistakeCounts": Object counting recurring error categories using ONLY keys: W_ARTICLES, W_TENSE, W_SVA, W_PREPOSITIONS, W_WORD_CHOICE, W_SENTENCE_STRUCTURE, W_TASK_RESPONSE (0 if none).
+4. "integrity": Object with:
+   - "risk": "LOW", "MEDIUM", or "HIGH"
+   - "confidence": Number from 0 to 100
+   - "reason": 1-2 concrete sentences explaining why this looks authentic or AI-generated/copied (cite specific phrases, style shifts, or band jumps).`;
+    
     const geminiData = await callGeminiWithFallback(
       apiKey,
       {
@@ -1449,8 +1495,9 @@ Return valid JSON with three fields:
     const aiEvaluation = formatAiEvaluation(parsed.evaluation);
     const estimatedBand = parsed.estimatedBand || "";
     const mistakeCounts = parsed.mistakeCounts || {};
+    const aiIntegrity = parsed.integrity || null;
 
-    await updateDoc(doc(db, "submissions", docId), { aiEvaluation, mistakeCounts, aiMistakesLogged: true });
+    await updateDoc(doc(db, "submissions", docId), { aiEvaluation, aiIntegrity, mistakeCounts, aiMistakesLogged: true });
     if (!sub.aiMistakesLogged && parsed.mistakeCounts) {
       await logAiMistakesToStudent(sub.studentId, parsed.mistakeCounts);
     }
@@ -1458,6 +1505,7 @@ Return valid JSON with three fields:
     const subIdx = store.cachedSubmissions.findIndex((s) => s.docId === docId);
     if (subIdx !== -1) {
       store.cachedSubmissions[subIdx].aiEvaluation = aiEvaluation;
+      store.cachedSubmissions[subIdx].aiIntegrity = aiIntegrity;
       store.cachedSubmissions[subIdx].mistakeCounts = mistakeCounts;
       store.cachedSubmissions[subIdx].aiMistakesLogged = true;
     }
