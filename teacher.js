@@ -133,6 +133,8 @@ function bindTeacherDelegatedClicks() {
       await unverifyTeacherGrade(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "delete-submission") {
       await deleteSubmission(btn.dataset.docId, btn.dataset.assignmentId);
+    } else if (action === "return-submission") {
+      await returnSubmissionForRedo(btn.dataset.docId, btn.dataset.assignmentId);
     } else if (action === "ai-eval-writing") {
       await evaluateWritingSubmission(btn.dataset.docId);
     } else if (action === "ai-eval-speaking") {
@@ -786,7 +788,8 @@ function renderTeacherHwMatrix(students, submissions) {
 
     studentAssignments.forEach((a) => {
       const sub = submissions.find((item) => item.studentId === s.studentId && item.assignmentId === a.id);
-      const dueTime = parseLocalDeadline(a.dueDate).getTime();
+      const effectiveDue = s.deadlineExtensions?.[a.id] || a.dueDate;
+      const dueTime = parseLocalDeadline(effectiveDue).getTime();
       const isPastDue = now.getTime() > dueTime;
       const isOverOneDayLate = now.getTime() > dueTime + oneDayMs;
       const isArchived = dueTime < cutoffMs;
@@ -1091,6 +1094,7 @@ export function renderTeacherGradingQueue(students, submissions) {
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;">
             ${aiBtnHtml}
+            <button type="button" class="btn btn-outline btn-sm" style="color:#b45309;border-color:#fde68a;background:#fffbeb;" data-action="return-submission" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}">↩ Return (+1 Day)</button>
             <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" data-action="delete-submission" data-doc-id="${escapeHtml(sub.docId)}" data-assignment-id="${escapeHtml(sub.assignmentId || "")}">Delete</button>
           </div>
         </div>
@@ -1246,6 +1250,77 @@ async function deleteSubmission(docId, assignmentId) {
   renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
   renderTeacherHwMatrix(store.cachedStudents, store.cachedSubmissions);
   notify("Submission deleted.", "success");
+}
+
+async function returnSubmissionForRedo(docId, assignmentId) {
+  const sub = store.cachedSubmissions.find((s) => s.docId === docId);
+  if (!sub) return;
+
+  const student = store.cachedStudents.find((s) => s.studentId === sub.studentId);
+  const studentLabel = student ? `${student.fullName} (${student.studentId})` : sub.studentId;
+  const typedNote = document.getElementById(`fb-${docId}`)?.value.trim() || sub.teacherFeedback || "";
+
+  const reason = prompt(
+    `Return this submission to ${studentLabel} and grant +1 extra day (24h from now) to resubmit?\n\nOptional note explaining what to fix:`,
+    typedNote
+  );
+  if (reason === null) return;
+
+  // Give 24 hours from right now (local YYYY-MM-DDTHH:mm format)
+  const extDate = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const pad = (n) => String(n).padStart(2, "0");
+  const newDueIso = `${extDate.getFullYear()}-${pad(extDate.getMonth() + 1)}-${pad(extDate.getDate())}T${pad(extDate.getHours())}:${pad(extDate.getMinutes())}`;
+
+  // 1. Delete old submission so student can submit fresh
+  await deleteDoc(doc(db, "submissions", docId));
+
+  // 2. Store individual deadline extension + return note on the student's profile (works for BOTH static & dynamic HW)
+  const studentRef = doc(db, "users", sub.studentId);
+  const currentExts = { ...(student?.deadlineExtensions || {}) };
+  const currentNotes = { ...(student?.returnedNotes || {}) };
+  currentExts[assignmentId] = newDueIso;
+  if (reason.trim()) currentNotes[assignmentId] = reason.trim();
+  else delete currentNotes[assignmentId];
+
+  await updateDoc(studentRef, {
+    deadlineExtensions: currentExts,
+    returnedNotes: currentNotes
+  });
+
+  if (student) {
+    student.deadlineExtensions = currentExts;
+    student.returnedNotes = currentNotes;
+  }
+
+  // 3. If it's a dynamic custom HW or punishment, also reset its status & dueDate
+  if (assignmentId && assignmentId.startsWith("CUSTOMHW_")) {
+    await updateDoc(doc(db, "customAssignments", assignmentId), {
+      status: "pending",
+      dueDate: newDueIso
+    }).catch(() => {});
+    const hwIdx = store.cachedTeacherHw.findIndex((h) => h.id === assignmentId);
+    if (hwIdx !== -1) {
+      store.cachedTeacherHw[hwIdx].status = "pending";
+      store.cachedTeacherHw[hwIdx].dueDate = newDueIso;
+    }
+    renderTeacherCustomHw(store.cachedTeacherHw, store.cachedStudents);
+  } else if (assignmentId && assignmentId.startsWith("PUN_")) {
+    await updateDoc(doc(db, "punishments", assignmentId), {
+      status: "pending",
+      dueDate: newDueIso
+    }).catch(() => {});
+    const punIdx = store.cachedTeacherPunishments.findIndex((p) => p.id === assignmentId);
+    if (punIdx !== -1) {
+      store.cachedTeacherPunishments[punIdx].status = "pending";
+      store.cachedTeacherPunishments[punIdx].dueDate = newDueIso;
+    }
+    renderTeacherPunishments(store.cachedTeacherPunishments, store.cachedStudents);
+  }
+
+  store.cachedSubmissions = store.cachedSubmissions.filter((s) => s.docId !== docId);
+  renderTeacherGradingQueue(store.cachedStudents, store.cachedSubmissions);
+  renderTeacherHwMatrix(store.cachedStudents, store.cachedSubmissions);
+  notify(`Returned to ${studentLabel} with +1 day extension!`, "success");
 }
 
 function quickAssignPunishment(studentId, skill) {
