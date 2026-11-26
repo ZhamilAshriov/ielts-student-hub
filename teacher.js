@@ -52,6 +52,7 @@ let showArchivedGraded = false;
 let teacherListenersBound = false;
 let mocksLoaded = false;
 let gradingSkillFilter = "all";
+let editingAnnouncementId = null;
 
 function toCloudinaryThumb(url, width = 450) {
   if (!url || !url.includes("/image/upload/")) return url;
@@ -112,6 +113,10 @@ function bindTeacherDelegatedClicks() {
       );
     } else if (action === "inspect-student") {
       await inspectStudent(btn.dataset.studentId);
+    } else if (action === "edit-ann") {
+      startEditAnnouncement(btn.dataset.docId);
+    } else if (action === "cancel-edit-ann") {
+      resetAnnouncementEditor();
     } else if (action === "delete-ann") {
       await deleteAnnouncement(btn.dataset.docId);
     } else if (action === "toggle-archived-hw") {
@@ -583,6 +588,52 @@ async function handleCreateStudent(e) {
   });
 }
 
+function formatNowStamp() {
+  return new Date().toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
+function startEditAnnouncement(docId) {
+  const ann = store.cachedAnnouncements.find((a) => a.docId === docId);
+  if (!ann) return;
+
+  editingAnnouncementId = docId;
+  document.getElementById("ann-title").value = ann.title || "";
+  document.getElementById("ann-tag").value = ann.tag || "GENERAL";
+  document.getElementById("ann-body").value = ann.body || "";
+  document.getElementById("ann-pinned").checked = Boolean(ann.pinned);
+
+  const btn = document.getElementById("post-ann-btn");
+  if (btn) btn.textContent = "Save Updated Announcement";
+
+  let cancelBtn = document.getElementById("cancel-edit-ann-btn");
+  if (!cancelBtn && btn?.parentElement) {
+    cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.id = "cancel-edit-ann-btn";
+    cancelBtn.className = "btn btn-outline btn-full";
+    cancelBtn.style.marginTop = "8px";
+    cancelBtn.dataset.action = "cancel-edit-ann";
+    cancelBtn.textContent = "Cancel Edit";
+    btn.insertAdjacentElement("afterend", cancelBtn);
+  }
+
+  document.getElementById("announcement-form")?.scrollIntoView({ behavior: "smooth" });
+}
+
+function resetAnnouncementEditor() {
+  editingAnnouncementId = null;
+  document.getElementById("announcement-form")?.reset();
+  const btn = document.getElementById("post-ann-btn");
+  if (btn) btn.textContent = "Publish Announcement";
+  document.getElementById("cancel-edit-ann-btn")?.remove();
+}
+
 async function handlePostAnnouncement(e) {
   e.preventDefault();
   const msgEl = document.getElementById("ann-post-msg");
@@ -593,21 +644,48 @@ async function handlePostAnnouncement(e) {
   const pinned = document.getElementById("ann-pinned").checked;
 
   msgEl.textContent = "";
-  await withLoading(btn, "Publishing...", async () => {
-    const docId = `ANN_${Date.now()}`;
-    await setDoc(doc(db, "announcements", docId), {
-      title,
-      tag,
-      body,
-      pinned,
-      dateLabel: new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-      createdAtMs: Date.now(),
-      createdAt: serverTimestamp()
-    });
-    msgEl.style.color = "var(--success)";
-    msgEl.textContent = "Announcement published!";
-    notify("Announcement published!", "success");
-    e.target.reset();
+  const isEditing = Boolean(editingAnnouncementId);
+
+  await withLoading(btn, isEditing ? "Updating..." : "Publishing...", async () => {
+    const stamp = formatNowStamp();
+
+    if (isEditing) {
+      const existing = store.cachedAnnouncements.find((a) => a.docId === editingAnnouncementId);
+      const prevHistory = Array.isArray(existing?.updateHistory) ? existing.updateHistory : [];
+      const nextHistory = [...prevHistory, stamp];
+
+      await updateDoc(doc(db, "announcements", editingAnnouncementId), {
+        title,
+        tag,
+        body,
+        pinned,
+        updateHistory: nextHistory,
+        updatedAtMs: Date.now()
+      });
+
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = `Announcement updated (Revision #${nextHistory.length})!`;
+      notify("Announcement updated!", "success");
+      resetAnnouncementEditor();
+    } else {
+      const docId = `ANN_${Date.now()}`;
+      await setDoc(doc(db, "announcements", docId), {
+        title,
+        tag,
+        body,
+        pinned,
+        dateLabel: stamp,
+        updateHistory: [],
+        createdAtMs: Date.now(),
+        createdAt: serverTimestamp()
+      });
+
+      msgEl.style.color = "var(--success)";
+      msgEl.textContent = "Announcement published!";
+      notify("Announcement published!", "success");
+      e.target.reset();
+    }
+
     await loadTeacherData();
   });
 }
@@ -630,7 +708,10 @@ function renderTeacherAnnouncementsList(list) {
           <span class="muted" style="font-size:12px;margin-left:6px;">${formatAnnouncementDate(ann)}</span>
           <h3 style="margin-top:6px;">${escapeHtml(ann.title)}</h3>
         </div>
-        <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" data-action="delete-ann" data-doc-id="${escapeHtml(ann.docId)}">Delete</button>
+        <div style="display:flex;gap:6px;flex-shrink:0;">
+          <button type="button" class="btn btn-outline btn-sm" data-action="edit-ann" data-doc-id="${escapeHtml(ann.docId)}">Edit</button>
+          <button type="button" class="btn btn-outline btn-sm" style="color:var(--danger);border-color:#fecaca;" data-action="delete-ann" data-doc-id="${escapeHtml(ann.docId)}">Delete</button>
+        </div>
       </div>
       <p style="font-size:14px;white-space:pre-line;margin-top:8px;margin-bottom:0;color:var(--text);">${escapeHtml(ann.body)}</p>
       ${buildAnnouncementReactionsHtml(ann, "TEACHER", true)}
