@@ -301,7 +301,20 @@ function getUnifiedAssignmentsList() {
     };
   });
 
-  return [...ASSIGNMENTS, ...mappedDynamicHw];
+  const extensions = store.currentStudentProfile?.deadlineExtensions || {};
+  const returnedNotes = store.currentStudentProfile?.returnedNotes || {};
+
+  return [...ASSIGNMENTS, ...mappedDynamicHw].map((hw) => {
+    const extDue = extensions[hw.id];
+    const retNote = returnedNotes[hw.id];
+    if (!extDue && !retNote) return hw;
+    return {
+      ...hw,
+      dueDate: extDue || hw.dueDate,
+      hasExtension: Boolean(extDue),
+      returnedNote: retNote || ""
+    };
+  });
 }
 
 export function updateDashboardUI() {
@@ -410,6 +423,12 @@ function renderAssignmentsList() {
             }
             if (sub && sub.teacherFeedback) {
               feedbackHtml = `<div class="feedback-callout"><strong>Teacher Feedback:</strong> ${escapeHtml(sub.teacherFeedback)}</div>`;
+            }
+          } else if (hw.returnedNote || hw.hasExtension) {
+            statusBadge = `<span class="badge badge-yellow">Returned • Extended Due ${formatDueDate(hw.dueDate)}</span>`;
+            actionBtn = `<button type="button" class="btn btn-primary btn-sm" data-action="start-hw" data-id="${escapeHtml(hw.id)}">Resubmit</button>`;
+            if (hw.returnedNote) {
+              feedbackHtml = `<div class="feedback-callout" style="border-left-color:#f59e0b;background:#fffbeb;"><strong>Returned by Teacher:</strong> ${escapeHtml(hw.returnedNote)}</div>`;
             }
             actionBtn =
               sub && (hw.skill === "reading" || hw.skill === "listening")
@@ -807,11 +826,12 @@ async function startPunishmentRunner(taskId) {
     instructions = `Complete ${raw.details?.testCount || 1} test set(s). Take a screenshot of your result.`;
   }
 
+  const effectiveDue = store.currentStudentProfile?.deadlineExtensions?.[raw.id] || raw.dueDate;
   const task = {
     id: raw.id,
     title: raw.reason,
     skill: raw.skill,
-    dueDate: raw.dueDate,
+    dueDate: effectiveDue,
     isDynamic: true,
     totalQuestions: (raw.details?.testCount || 1) * 40,
     instructions: instructions.trim(),
