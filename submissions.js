@@ -149,8 +149,16 @@ export async function submitTaskSubmission({
       });
     }
 
-    if (updatedMistakes) {
-      tx.set(userRef, { permanentMistakes: updatedMistakes }, { merge: true });
+    const profilePatch = {};
+    if (updatedMistakes) profilePatch.permanentMistakes = updatedMistakes;
+    if (store.currentStudentProfile?.returnedNotes?.[task.id]) {
+      const nextNotes = { ...store.currentStudentProfile.returnedNotes };
+      delete nextNotes[task.id];
+      profilePatch.returnedNotes = nextNotes;
+      store.currentStudentProfile.returnedNotes = nextNotes;
+    }
+    if (Object.keys(profilePatch).length > 0) {
+      tx.set(userRef, profilePatch, { merge: true });
     }
   });
 
